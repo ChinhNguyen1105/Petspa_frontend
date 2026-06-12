@@ -1,0 +1,33 @@
+/* src/styles/animations.css */
+
+/* Lớp cơ bản để ẩn phần tử */
+.reveal-on-scroll {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 1s ease, transform 1s ease;
+  will-change: opacity, transform;
+}
+
+/* Lớp sẽ được thêm vào bằng JavaScript/Hook khi phần tử hiện ra */
+.is-revealed {
+  opacity: 1;
+  transform: translateY(0px);
+}
+
+/* Hiệu ứng Bounce nhẹ cho Badge */
+@keyframes softBounce {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+.badge-bounce {
+  animation: softBounce 3s ease-in-out infinite;
+}
+
+/* Hiệu ứng Floating mượt cho Card */
+@keyframes floatingCard {
+  0%, 100% { transform: translate(-24px, -24px) rotate(0deg); }
+  50% { transform: translate(-24px, -36px) rotate(1deg); }
+}
+.floating-card-revealed {
+  animation: floatingCard 6s ease-in-out infinite;
+}

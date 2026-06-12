@@ -1,0 +1,177 @@
+export const menuMock = {
+  success: true,
+  message: "Get menus successfully",
+  result: [
+    {
+      id: 1,
+      name: "Tổng quan",
+      path: "/admin/dashboard",
+      icon: "LayoutDashboard",
+      roles: ["ADMIN", "MANAGER", "STAFF"],
+      children: [],
+      // Kế thừa từ FlagUserDateAuditing
+      createdBy: "system",
+      lastModifiedBy: "system",
+      createdDate: "2026-06-01T08:00:00",
+      lastModifiedDate: "2026-06-01T08:00:00",
+      activeFlag: true,
+      deleteFlag: false
+    },
+    {
+      id: 2,
+      name: "Quản lý lịch hẹn",
+      path: "/admin/bookings",
+      icon: "Calendar",
+      roles: ["ADMIN", "MANAGER", "STAFF"],
+      children: [],
+      createdBy: "system",
+      lastModifiedBy: "system",
+      createdDate: "2026-06-01T08:00:00",
+      lastModifiedDate: "2026-06-01T08:00:00",
+      activeFlag: true,
+      deleteFlag: false
+    },
+    {
+      id: 3,
+      name: "Quản lý đơn hàng",
+      path: "/admin/orders",
+      icon: "ClipboardList",
+      roles: ["ADMIN", "MANAGER", "STAFF"],
+      children: [],
+      createdBy: "system",
+      lastModifiedBy: "system",
+      createdDate: "2026-06-01T08:00:00",
+      lastModifiedDate: "2026-06-01T08:00:00",
+      activeFlag: true,
+      deleteFlag: false
+    },
+    {
+      id: 4,
+      name: "Quản lý sản phẩm",
+      path: "/admin/products/list",
+      icon: "ShoppingBag",
+      roles: ["ADMIN", "MANAGER", "STAFF"],
+      children: [],
+      createdBy: "system",
+      lastModifiedBy: "system",
+      createdDate: "2026-06-01T08:00:00",
+      lastModifiedDate: "2026-06-01T08:00:00",
+      activeFlag: true,
+      deleteFlag: false
+    },
+    {
+      id: 5,
+      name: "Quản lý dịch vụ",
+      path: "/admin/services/list",
+      icon: "Scissors",
+      roles: ["ADMIN", "MANAGER", "STAFF"],
+      children: [],
+      createdBy: "system",
+      lastModifiedBy: "system",
+      createdDate: "2026-06-01T08:00:00",
+      lastModifiedDate: "2026-06-01T08:00:00",
+      activeFlag: true,
+      deleteFlag: false
+    },
+    {
+      id: 6,
+      name: "Quản lý danh mục",
+      path: "/admin/categories",
+      icon: "Layers",
+      roles: ["ADMIN", "MANAGER"],
+      children: [],
+      createdBy: "system",
+      lastModifiedBy: "system",
+      createdDate: "2026-06-01T08:00:00",
+      lastModifiedDate: "2026-06-01T08:00:00",
+      activeFlag: true,
+      deleteFlag: false
+    },
+    {
+      id: 7,
+      name: "Quản lý kho hàng",
+      path: "/admin/inventory",
+      icon: "Boxes", // Icon bọc ngoài cho phân hệ kho
+      roles: ["ADMIN", "MANAGER"],
+      createdBy: "system",
+      lastModifiedBy: "system",
+      createdDate: "2026-06-01T08:00:00",
+      lastModifiedDate: "2026-06-01T08:00:00",
+      activeFlag: true,
+      deleteFlag: false,
+      // Đưa list/transaction thành mục con (children) đúng chuẩn MenuDto
+      children: [
+        {
+          id: 71,
+          name: "Danh sách tồn kho",
+          path: "/admin/inventory/list",
+          icon: "Package",
+          roles: ["ADMIN", "MANAGER"],
+          children: [],
+          createdBy: "system",
+          lastModifiedBy: "system",
+          createdDate: "2026-06-01T08:00:00",
+          lastModifiedDate: "2026-06-01T08:00:00",
+          activeFlag: true,
+          deleteFlag: false
+        },
+        {
+          id: 72,
+          name: "Giao dịch nhập xuất",
+          path: "/admin/inventory/transaction",
+          icon: "History",
+          roles: ["ADMIN", "MANAGER"],
+          children: [],
+          createdBy: "system",
+          lastModifiedBy: "system",
+          createdDate: "2026-06-01T08:00:00",
+          lastModifiedDate: "2026-06-01T08:00:00",
+          activeFlag: true,
+          deleteFlag: false
+        }
+      ]
+    },
+    {
+      id: 8,
+      name: "Quản lý khách hàng",
+      path: "/admin/users",
+      icon: "Users",
+      roles: ["ADMIN", "MANAGER"],
+      children: [],
+      createdBy: "system",
+      lastModifiedBy: "system",
+      createdDate: "2026-06-01T08:00:00",
+      lastModifiedDate: "2026-06-01T08:00:00",
+      activeFlag: true,
+      deleteFlag: false
+    },
+    {
+      id: 9,
+      name: "Báo cáo doanh thu",
+      path: "/admin/reports",
+      icon: "BarChart3",
+      roles: ["ADMIN", "MANAGER"],
+      children: [],
+      createdBy: "system",
+      lastModifiedBy: "system",
+      createdDate: "2026-06-01T08:00:00",
+      lastModifiedDate: "2026-06-01T08:00:00",
+      activeFlag: true,
+      deleteFlag: false
+      },
+    {
+      id: 10,
+      name: "Quản lý phân quyền",
+      path: "/admin/roles",
+      icon: "Shield",
+      roles: ["ADMIN"],
+      children: [],
+      createdBy: "system",
+      lastModifiedBy: "system",
+      createdDate: "2026-06-01T08:00:00",
+      lastModifiedDate: "2026-06-01T08:00:00",
+      activeFlag: true,
+      deleteFlag: false
+    }
+  ]
+};

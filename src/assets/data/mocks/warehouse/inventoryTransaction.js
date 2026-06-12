@@ -1,0 +1,75 @@
+export const inventoryTransactionMock = {
+  meta: {
+    page: 1,
+    pageSize: 10,
+    pages: 3,
+    total: 5,
+  },
+
+  result: [
+    {
+      productId: 1,
+      productName: "Thức ăn cho chó Pedigree",
+      type: "IMPORT",
+      quantity: 50,
+      currentStock: 120,
+      note: "Nhập hàng từ nhà cung cấp ABC",
+      createdBy: "admin@gmail.com",
+      lastModifiedBy: "admin@gmail.com",
+      createdDate: "2026-06-08T09:30:00",
+      lastModifiedDate: "2026-06-08T09:30:00",
+    },
+
+    {
+      productId: 1,
+      productName: "Thức ăn cho chó Pedigree",
+      type: "EXPORT",
+      quantity: 10,
+      currentStock: 110,
+      note: "Khách hàng đặt hàng online",
+      createdBy: "system",
+      lastModifiedBy: "system",
+      createdDate: "2026-06-08T14:20:00",
+      lastModifiedDate: "2026-06-08T14:20:00",
+    },
+
+    {
+      productId: 2,
+      productName: "Cát vệ sinh cho mèo Catsan",
+      type: "IMPORT",
+      quantity: 30,
+      currentStock: 80,
+      note: "Bổ sung hàng tháng",
+      createdBy: "warehouse@gmail.com",
+      lastModifiedBy: "warehouse@gmail.com",
+      createdDate: "2026-06-09T08:15:00",
+      lastModifiedDate: "2026-06-09T08:15:00",
+    },
+
+    {
+      productId: 3,
+      productName: "Sữa tắm cho chó Poodle",
+      type: "EXPORT",
+      quantity: 5,
+      currentStock: 45,
+      note: "Xuất kho cho đơn hàng #DH1005",
+      createdBy: "staff@gmail.com",
+      lastModifiedBy: "staff@gmail.com",
+      createdDate: "2026-06-09T11:40:00",
+      lastModifiedDate: "2026-06-09T11:40:00",
+    },
+
+    {
+      productId: 4,
+      productName: "Đồ chơi bóng cao su cho chó",
+      type: "IMPORT",
+      quantity: 100,
+      currentStock: 250,
+      note: "Nhập lô hàng mới",
+      createdBy: "admin@gmail.com",
+      lastModifiedBy: "manager@gmail.com",
+      createdDate: "2026-06-10T09:00:00",
+      lastModifiedDate: "2026-06-10T10:15:00",
+    },
+  ],
+};

@@ -1,0 +1,16 @@
+export const SLOT_TIMES = [
+  { startTime: "08:00:00", endTime: "08:30:00" },
+  { startTime: "08:30:00", endTime: "09:00:00" },
+  { startTime: "09:00:00", endTime: "09:30:00" },
+  { startTime: "09:30:00", endTime: "10:00:00" },
+  { startTime: "10:00:00", endTime: "10:30:00" },
+  { startTime: "10:30:00", endTime: "11:00:00" },
+  { startTime: "13:00:00", endTime: "13:30:00" },
+  { startTime: "13:30:00", endTime: "14:00:00" },
+  { startTime: "14:00:00", endTime: "14:30:00" },
+  { startTime: "14:30:00", endTime: "15:00:00" },
+  { startTime: "15:00:00", endTime: "15:30:00" },
+  { startTime: "15:30:00", endTime: "16:00:00" },
+  { startTime: "16:00:00", endTime: "16:30:00" },
+  { startTime: "16:30:00", endTime: "17:00:00" },
+];
