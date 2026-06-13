@@ -2,16 +2,8 @@ import api from "./api";
 import { APP_CONFIG } from "./config";
 import { URL_CONSTANT } from "../constants/urlConstant";
 
-import { orderMock } from "../assets/data/mocks/order/orderList";
+const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const delay = (ms) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
-/*
-|--------------------------------------------------------------------------
-| CONFIG
-|--------------------------------------------------------------------------
-*/
 let useApi = APP_CONFIG.USE_REAL_API;
 
 const setApi = (flag) => {
@@ -19,379 +11,166 @@ const setApi = (flag) => {
 };
 
 const shouldUseApi = (options = {}) =>
-  options.api !== undefined
-    ? !!options.api
-    : useApi;
+  options.api !== undefined ? !!options.api : useApi;
 
-/*
-|--------------------------------------------------------------------------
-| GET ORDERS
-|--------------------------------------------------------------------------
-*/
-const getOrders = async (
-  params = {},
-  options = {}
-) => {
+/* ───────────────────────── SAFE HELPERS ───────────────────────── */
+const safeArray = (arr) => (Array.isArray(arr) ? arr : []);
+
+/* ───────────────────────── GET ALL ORDERS ───────────────────────── */
+const getOrders = async (params = {}, options = {}) => {
   if (shouldUseApi(options)) {
-    const resp = await api.get(
-      URL_CONSTANT.Order.GET_ALL_ORDERS,
-      { params }
-    );
-
-    return resp.data;
+    const res = await api.get(URL_CONSTANT.Order.GET_ALL_ORDERS, {
+      params,
+    });
+    console.log("getOrders", res.data);
+    return res.data;
   }
 
-  await delay(500);
-
-  let result = [...orderMock.result];
-
-  const {
-    keyword,
-    status,
-    paymentStatus,
-    userId,
-  } = params;
-
-  if (keyword) {
-    result = result.filter(
-      (order) =>
-        order.userName
-          ?.toLowerCase()
-          .includes(keyword.toLowerCase()) ||
-        order.userEmail
-          ?.toLowerCase()
-          .includes(keyword.toLowerCase()) ||
-        String(order.id).includes(keyword)
-    );
-  }
-
-  if (status) {
-    result = result.filter(
-      (order) => order.status === status
-    );
-  }
-
-  if (paymentStatus) {
-    result = result.filter(
-      (order) =>
-        order.paymentStatus ===
-        paymentStatus
-    );
-  }
-
-  if (userId) {
-    result = result.filter(
-      (order) =>
-        String(order.userId) ===
-        String(userId)
-    );
-  }
+  await delay(300);
 
   return {
     success: true,
-    message:
-      orderMock.message ||
-      "Get all orders successfully",
-    data: {
-      meta: {
-        ...(orderMock.meta || {}),
-        total: result.length,
-      },
-      result,
-    },
+    data: { result: [], meta: { total: 0 } },
   };
 };
 
-/*
-|--------------------------------------------------------------------------
-| GET ORDER DETAIL
-|--------------------------------------------------------------------------
-*/
-const getOrderById = async (
-  orderId,
-  options = {}
-) => {
+/* ───────────────────────── GET ORDER BY ID ───────────────────────── */
+const getOrderById = async (orderId, options = {}) => {
   if (shouldUseApi(options)) {
-    const resp = await api.get(
-      URL_CONSTANT.Order.GET_ORDER_DETAIL.replace(
-        "{id}",
-        orderId
-      )
+    const res = await api.get(
+      URL_CONSTANT.Order.GET_ORDER_DETAIL.replace("{id}", orderId)
     );
-
-    return resp.data;
+    return res.data;
   }
 
-  await delay(500);
-
-  const foundOrder =
-    orderMock.result.find(
-      (order) =>
-        String(order.id) ===
-        String(orderId)
-    ) || null;
-
-  return {
-    success: !!foundOrder,
-    message: foundOrder
-      ? "Get order detail successfully"
-      : "Order not found",
-    data: foundOrder,
-  };
-};
-
-/*
-|--------------------------------------------------------------------------
-| GET MY ORDERS
-|--------------------------------------------------------------------------
-*/
-const getMyOrders = async (
-  params = {},
-  options = {}
-) => {
-  if (shouldUseApi(options)) {
-    const resp = await api.get(
-      URL_CONSTANT.Order.GET_MY_ORDERS,
-      { params }
-    );
-
-    return resp.data;
-  }
-
-  await delay(500);
+  await delay(200);
 
   return {
     success: true,
-    message:
-      "Get my orders successfully",
-    data: {
-      meta: {
-        total: orderMock.result.length,
-      },
-      result: orderMock.result,
-    },
+    data: null,
   };
 };
 
-/*
-|--------------------------------------------------------------------------
-| GET ORDERS BY USER
-|--------------------------------------------------------------------------
-*/
-const getOrdersByUser = async (
-  userId,
-  options = {}
-) => {
+/* ───────────────────────── MY ORDERS ───────────────────────── */
+const getMyOrders = async (params = {}, options = {}) => {
   if (shouldUseApi(options)) {
-    const resp = await api.get(
-      URL_CONSTANT.Order.GET_MY_ORDERS,
-      {
-        params: { userId },
-      }
-    );
-
-    return resp.data;
+    const res = await api.get(URL_CONSTANT.Order.GET_MY_ORDERS, {
+      params,
+    });
+    return res.data;
   }
 
-  await delay(500);
-
-  const userOrders =
-    orderMock.result.filter(
-      (order) =>
-        String(order.userId) ===
-        String(userId)
-    );
+  await delay(200);
 
   return {
     success: true,
-    message:
-      "Get user orders successfully",
-    data: userOrders,
+    data: { result: [] },
   };
 };
 
-/*
-|--------------------------------------------------------------------------
-| CREATE ORDER
-|--------------------------------------------------------------------------
-*/
-const createOrder = async (
-  orderData,
-  options = {}
-) => {
+/* ───────────────────────── CREATE ORDER FROM CART ───────────────────────── */
+const createOrder = async (orderData, options = {}) => {
+  const payload = {
+    cartItemIds: safeArray(orderData?.cartItemIds),
+    addressId: orderData?.addressId,
+    paymentMethod: orderData?.paymentMethod || "COD",
+  };
+
+  // 🔥 FRONTEND VALIDATION (CHẶN LỖI 400)
+  if (!payload.cartItemIds.length) {
+    throw new Error("[ORDER] Bạn chưa chọn sản phẩm");
+  }
+
+  if (!payload.addressId) {
+    throw new Error("[ORDER] Thiếu địa chỉ giao hàng");
+  }
+
+  if (!payload.paymentMethod) {
+    throw new Error("[ORDER] Thiếu phương thức thanh toán");
+  }
+
+  console.log("🔥 CREATE ORDER PAYLOAD:", payload);
+
   if (shouldUseApi(options)) {
-    const resp = await api.post(
+    const res = await api.post(
       URL_CONSTANT.Order.CREATE_ORDER_FROM_CART,
-      orderData
+      payload
     );
-
-    return resp.data;
+    return res.data;
   }
 
-  await delay(800);
+  await delay(500);
 
   return {
     success: true,
-    message:
-      "Create order successfully",
     data: {
       id: Date.now(),
-
-      userId:
-        orderData.userId || 1,
-
-      userName:
-        orderData.userName ||
-        "Khách Hàng Mới",
-
-      userEmail:
-        orderData.userEmail || "",
-
-      shippingName:
-        orderData.shippingName ||
-        "Khách Hàng Mới",
-
-      shippingPhone:
-        orderData.shippingPhone || "",
-
-      shippingAddressFull:
-        orderData.shippingAddressFull ||
-        "",
-
-      totalQuantity:
-        orderData.totalQuantity || 0,
-
-      totalAmount:
-        orderData.totalAmount || 0,
-
+      ...payload,
       status: "PROCESSING",
-
-      paymentMethod:
-        orderData.paymentMethod ||
-        "COD",
-
-      paymentStatus:
-        "PENDING",
-
-      activeFlag: true,
-      deleteFlag: false,
-
-      createdDate:
-        new Date().toISOString(),
-
-      orderDetails:
-        orderData.orderDetails || [],
+      paymentStatus: "PENDING",
+      createdDate: new Date().toISOString(),
     },
   };
 };
 
-/*
-|--------------------------------------------------------------------------
-| UPDATE ORDER STATUS
-|--------------------------------------------------------------------------
-*/
-const updateOrderStatus = async (
-  orderId,
-  newStatus,
-  options = {}
-) => {
+/* ───────────────────────── UPDATE STATUS ───────────────────────── */
+const updateOrderStatus = async (orderId, status, options = {}) => {
+  const payload = {
+    orderId,
+    status,
+  };
+
   if (shouldUseApi(options)) {
-    const resp = await api.patch(
+    const res = await api.patch(
       URL_CONSTANT.Order.UPDATE_ORDER_STATUS,
-      {
-        orderId,
-        status: newStatus,
-      }
+      payload
     );
-
-    return resp.data;
+    return res.data;
   }
 
-  await delay(600);
+  await delay(200);
 
   return {
     success: true,
-    message:
-      "Update order status successfully",
-    data: {
-      id: Number(orderId),
-      status: newStatus,
-      lastModifiedDate:
-        new Date().toISOString(),
-    },
+    data: payload,
   };
 };
 
-/*
-|--------------------------------------------------------------------------
-| CANCEL ORDER
-|--------------------------------------------------------------------------
-*/
-const cancelOrder = async (
-  orderId,
-  options = {}
-) => {
+/* ───────────────────────── CANCEL ORDER ───────────────────────── */
+const cancelOrder = async (orderId, options = {}) => {
   if (shouldUseApi(options)) {
-    const resp = await api.patch(
-      URL_CONSTANT.Order.CANCEL_ORDER.replace(
-        "{id}",
-        orderId
-      )
+    const res = await api.patch(
+      URL_CONSTANT.Order.CANCEL_ORDER.replace("{id}", orderId)
     );
-
-    return resp.data;
+    return res.data;
   }
 
-  await delay(600);
+  await delay(200);
 
   return {
     success: true,
-    message:
-      "Cancel order successfully",
-    data: {
-      id: Number(orderId),
-      status: "CANCELLED",
-      lastModifiedDate:
-        new Date().toISOString(),
-    },
+    data: { id: orderId, status: "CANCELLED" },
   };
 };
 
-/*
-|--------------------------------------------------------------------------
-| PAYMENT
-|--------------------------------------------------------------------------
-*/
-const payOrder = async (
-  orderId,
-  paymentMethod,
-  options = {}
-) => {
+/* ───────────────────────── PAYMENT ───────────────────────── */
+const payOrder = async (orderId, paymentMethod, options = {}) => {
   if (shouldUseApi(options)) {
-    const resp = await api.post(
-      URL_CONSTANT.Payment.CREATE_PAYMENT,
-      {
-        orderId,
-        paymentMethod,
-      }
-    );
-
-    return resp.data;
-  }
-
-  await delay(1000);
-
-  return {
-    success: true,
-    message:
-      "Payment successfully",
-    data: {
-      id: Number(orderId),
+    const res = await api.post(URL_CONSTANT.Payment.CREATE_PAYMENT, {
+      orderId,
       paymentMethod,
-      paymentStatus:
-        "SUCCESS",
-      lastModifiedDate:
-        new Date().toISOString(),
+    });
+    return res.data;
+  }
+
+  await delay(300);
+
+  return {
+    success: true,
+    data: {
+      orderId,
+      paymentMethod,
+      paymentStatus: "SUCCESS",
     },
   };
 };
@@ -401,14 +180,11 @@ export default {
 
   getOrders,
   getOrderById,
-
   getMyOrders,
-  getOrdersByUser,
 
   createOrder,
 
   updateOrderStatus,
   cancelOrder,
-
   payOrder,
 };

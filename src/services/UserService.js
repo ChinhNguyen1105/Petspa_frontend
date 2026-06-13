@@ -39,7 +39,7 @@ const getUsers = async (
         params,
       }
     );
-
+    console.log("getUsers", resp);
     return resp.data;
   }
 
@@ -215,7 +215,7 @@ const createUser = async (
       URL_CONSTANT.User.CREATE_USER,
       userData
     );
-
+    console.log("user create:", userData);
     return resp.data;
   }
 

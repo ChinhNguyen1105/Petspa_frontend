@@ -5,23 +5,22 @@ import { useOrderStore } from '../../store/orderStore';
 import { useCartStore } from '../../store/cartStore'; 
 import { STATUS_FILTERS } from '../../constants';
 
-// Trường hợp dự án chưa import được STATUS_FILTERS từ file constants, 
-// bạn có thể dùng mảng fallback dưới đây, nếu đã có sẵn thì giữ nguyên.
+// Sử dụng mảng bộ lọc trạng thái từ constants
 const TABS = STATUS_FILTERS;
 
 const OrderList = ({ userId = 1 }) => {
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [activeTab, setActiveTab] = useState('ALL');
   
-  // ĐỒNG BỘ STORE: Sử dụng fetchOrdersByUser dành cho Client thay vì fetchOrders của Admin
-  const { orders, loading, fetchOrdersByUser, cancelOrder } = useOrderStore();
-  // ĐỒNG BỘ ACTIONS: Tên chính xác trong useCartStore là showToast
+  // ĐỒNG BỘ STORE MỚI: Dùng fetchOrders thay cho fetchOrdersByUser không còn tồn tại
+  const { orders, loading, fetchOrders, cancelOrder } = useOrderStore();
   const { showToast } = useCartStore();
 
-  // Gọi API giả lập lấy danh sách đơn hàng của User khi component mount
+  // Gọi API lấy danh sách đơn hàng khi component mount hoặc userId thay đổi
   useEffect(() => {
-    fetchOrdersByUser(userId);
-  }, [fetchOrdersByUser, userId]);
+    // Truyền userId qua params để lấy đúng danh sách đơn hàng của user hiện tại
+    fetchOrders({ userId });
+  }, [fetchOrders, userId]);
 
   // Bộ lọc dữ liệu theo các Tab trạng thái tương ứng
   useEffect(() => {
@@ -42,7 +41,6 @@ const OrderList = ({ userId = 1 }) => {
       const res = await cancelOrder(orderId);
       
       if (res && res.success) {
-        // Đồng bộ gọi hàm hiển thị toast chuẩn của dự án
         if (showToast) {
           showToast("Hủy đơn hàng thành công!", "success");
         } else {

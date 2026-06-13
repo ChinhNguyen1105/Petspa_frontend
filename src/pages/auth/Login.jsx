@@ -56,12 +56,13 @@ const Login = () => {
       email: formData.email.trim(),
       password: formData.password,
     });
-
+console.log("LOGIN RESULT:", result);
+console.log("FINAL ROLE:", result.role);
     if (result?.success) {
       console.log("FINAL ROLE:", result.role);
 
       // Điều hướng dựa theo vai trò (Role) trả về từ Store
-      if (["ADMIN", "STAFF"].includes(result.role)) {
+      if (["ROLE_ADMIN", "ROLE_STAFF"].includes(result.role)) {
         navigate("/admin/dashboard", { replace: true });
       } else {
         navigate("/", { replace: true });

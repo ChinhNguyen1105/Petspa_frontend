@@ -26,6 +26,17 @@ const shouldUseApi = (options = {}) =>
 
 /*
 |--------------------------------------------------------------------------
+| NORMALIZE RESPONSE
+|--------------------------------------------------------------------------
+*/
+const normalizeResponse = (resp) => ({
+  success: resp?.data?.status === "SUCCESS",
+  message: resp?.data?.message || "",
+  data: resp?.data?.data ?? null,
+});
+
+/*
+|--------------------------------------------------------------------------
 | GET PRODUCTS
 |--------------------------------------------------------------------------
 */
@@ -39,14 +50,17 @@ const getProducts = async (
       { params }
     );
 
-    return resp.data;
+    console.log(
+      "product from service:",
+      resp.data
+    );
+
+    return normalizeResponse(resp);
   }
 
   await delay(500);
 
-  let finalResult = [
-    ...productList.result,
-  ];
+  let finalResult = [...productList.result];
 
   const {
     keyword,
@@ -56,7 +70,6 @@ const getProducts = async (
     sortDirection = "asc",
   } = params;
 
-  // SEARCH
   if (keyword) {
     finalResult = finalResult.filter(
       (product) =>
@@ -68,7 +81,6 @@ const getProducts = async (
     );
   }
 
-  // FILTER CATEGORY
   if (categoryId) {
     finalResult = finalResult.filter(
       (product) =>
@@ -77,7 +89,6 @@ const getProducts = async (
     );
   }
 
-  // FILTER STATUS
   if (status) {
     finalResult = finalResult.filter(
       (product) =>
@@ -85,7 +96,6 @@ const getProducts = async (
     );
   }
 
-  // SORT
   if (sortBy) {
     finalResult.sort((a, b) => {
       const valA = a[sortBy];
@@ -137,7 +147,7 @@ const getProductById = async (
       )
     );
 
-    return resp.data;
+    return normalizeResponse(resp);
   }
 
   await delay(500);
@@ -198,7 +208,7 @@ const createProduct = async (
       productData
     );
 
-    return resp.data;
+    return normalizeResponse(resp);
   }
 
   await delay(600);
@@ -260,7 +270,7 @@ const updateProduct = async (
       }
     );
 
-    return resp.data;
+    return normalizeResponse(resp);
   }
 
   await delay(600);
@@ -304,7 +314,7 @@ const deleteProduct = async (
       )
     );
 
-    return resp.data;
+    return normalizeResponse(resp);
   }
 
   await delay(400);
@@ -312,6 +322,7 @@ const deleteProduct = async (
   return {
     success: true,
     message: `Delete product #${id} successfully`,
+    data: null,
   };
 };
 

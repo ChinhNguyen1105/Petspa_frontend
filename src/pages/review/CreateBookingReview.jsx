@@ -1,11 +1,10 @@
-// src/pages/.../CreateBookingReview.jsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Star, ArrowLeft } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import Loading from '../../components/common/Loading';
 
-// TÍCH HỢP ĐỒNG THỜI CẢ 2 STORES THEO LUỒNG XỬ LÝ THỰC TẾ
+// TÍCH HỢP ĐỒNG THỜI CẢ 2 STORES THEO LUỒNG XỬ LÝ THỰC TẾ MỚI
 import { useBookingStore } from '../../store/bookingStore';
 import { useReviewStore } from '../../store/reviewStore';
 
@@ -13,20 +12,22 @@ const CreateBookingReview = () => {
   const { bookingId } = useParams();
   const navigate = useNavigate();
   
-  // 1. Lấy dữ liệu chi tiết Booking từ useBookingStore
+  // 1. Lấy dữ liệu chi tiết Booking từ useBookingStore mới
   const {
     currentBooking: booking,
-    loadingDetail: bookingLoading,
-    error: storeError,
-    fetchBookingDetail,
-    clearCurrentBooking,
-    markBookingReviewed
+    loading: bookingLoading, 
+    error: bookingError,
+    fetchBookingById, 
+    setCurrentBooking, 
+    markBookingReviewed 
   } = useBookingStore();
 
-  // 2. Lấy logic xử lý gửi đánh giá tập trung từ useReviewStore mới gộp chung
+  // 2. Cập nhật chính xác theo cấu trúc thực tế của useReviewStore mới
   const {
-    submitting, // Đồng bộ biến trạng thái loading nút bấm từ ReviewStore
-    createBookingReview
+    loading: reviewSubmitting, // Dùng biến loading của reviewStore làm trạng thái gửi form
+    error: reviewStoreError,    // Lấy error của reviewStore nếu có
+    createReview,               // Hàm chuẩn từ store mới thay cho createBookingReview cũ
+    clearError                  // Hàm utility để clear error cũ khi mount
   } = useReviewStore();
   
   // Local Form States
@@ -38,13 +39,16 @@ const CreateBookingReview = () => {
   // ─── ĐỒNG BỘ DỮ LIỆU KHI MOUNT & UNMOUNT ───────────────────────────────────
   useEffect(() => {
     if (bookingId) {
-      fetchBookingDetail(bookingId);
+      fetchBookingById(bookingId);
     }
+    
+    // Clear lỗi cũ của review store nếu có từ các phiên trước
+    clearError();
 
     return () => {
-      if (clearCurrentBooking) clearCurrentBooking();
+      setCurrentBooking(null);
     };
-  }, [bookingId, fetchBookingDetail, clearCurrentBooking]);
+  }, [bookingId, fetchBookingById, setCurrentBooking, clearError]);
 
   // ─── XỬ LÝ GỬI ĐÁNH GIÁ CHẠY THẬT QUA REVIEW STORE ────────────────────────
   const handleSubmit = async (e) => {
@@ -56,34 +60,36 @@ const CreateBookingReview = () => {
     }
 
     try {
-      const res = await createBookingReview({
+      // Gọi chính xác hàm tạo review mới theo cấu trúc reviewData của hệ thống
+      const res = await createReview({
         bookingId: Number(bookingId),
         rating,
         comment: comment.trim()
       });
 
-      if (res && res.success) {
+      // Kiểm tra phản hồi dựa trên axios/fetch service chuẩn (thường trả về dữ liệu thành công trực tiếp hoặc kèm status)
+      if (res) {
         if (markBookingReviewed) {
           markBookingReviewed(bookingId);
         }
         
-        // 👉 CHÈN THÔNG BÁO Ở ĐÂY: Trình duyệt sẽ dừng lại hiện thông báo
         alert('🎉 Cảm ơn bạn! Đánh giá dịch vụ Spa của bạn đã được gửi thành công.');
-        
         navigate('/member/booking-history');
-      } else {
-        setLocalError(res?.message || 'Gửi đánh giá thất bại. Vui lòng thử lại.');
       }
     } catch (err) {
-      setLocalError(err.message || 'Có lỗi xảy ra, vui lòng thử lại.');
+      // Lỗi từ store ném ra đã được catch tại đây, localError sẽ ưu tiên hiển thị thông báo tường minh
+      setLocalError(err.message || 'Gửi đánh giá thất bại. Vui lòng thử lại.');
     }
   };
 
   // Trạng thái Loading khi đang fetch chi tiết Booking từ hệ thống
-  if (bookingLoading) return <Loading fullScreen />;
+  if (bookingLoading && !booking) return <Loading fullScreen />;
 
   // Trích xuất mảng dịch vụ con an toàn từ booking
-  const servicesList = booking?.services || booking?.items || [];
+  const servicesList = booking?.bookingDetails || booking?.services || booking?.items || [];
+  
+  // Gom tất cả các nguồn lỗi để hiển thị tập trung lên UI
+  const displayError = localError || bookingError || reviewStoreError;
 
   return (
     <div className="min-h-screen bg-gray-50 pt-10 pb-20 text-left">
@@ -109,7 +115,7 @@ const CreateBookingReview = () => {
               <ul className="space-y-1.5 pl-1">
                 {servicesList.map((service, index) => (
                   <li key={service.id || index} className="text-gray-600 text-sm font-medium flex items-center gap-2">
-                    <span className="text-green-500 font-bold">✓</span> {service?.name || service?.serviceName}
+                    <span className="text-green-500 font-bold">✓</span> {service?.serviceName || service?.name}
                   </li>
                 ))}
               </ul>
@@ -127,9 +133,9 @@ const CreateBookingReview = () => {
           <hr className="border-t border-dashed border-gray-200 my-6" />
 
           {/* Khu vực hiển thị lỗi tập trung */}
-          {(localError || storeError) && (
+          {displayError && (
             <p className="text-red-500 text-sm mb-4 font-semibold bg-red-50 p-3 rounded-xl">
-              {localError || storeError}
+              {displayError}
             </p>
           )}
 
@@ -171,13 +177,13 @@ const CreateBookingReview = () => {
               />
             </div>
 
-            {/* NÚT GỬI ĐÁNH GIÁ (Tự động vô hiệu hóa khi đang call API qua biến submitting thực tế) */}
+            {/* NÚT GỬI ĐÁNH GIÁ */}
             <Button 
               type="submit" 
-              disabled={submitting} 
+              disabled={reviewSubmitting} 
               className="w-full !py-3.5 font-bold rounded-2xl text-lg flex items-center justify-center gap-2"
             >
-              {submitting ? 'Đang gửi đánh giá...' : 'Gửi đánh giá'}
+              {reviewSubmitting ? 'Đang gửi đánh giá...' : 'Gửi đánh giá'}
             </Button>
           </form>
         </div>

@@ -1,238 +1,172 @@
-// src/store/bookingStore.js
-
 import { create } from "zustand";
 import BookingService from "../services/BookingService";
-import { SLOT_TIMES } from "../constants";
 
 export const useBookingStore = create((set, get) => ({
-  // ─────────────────────────────────────────────────────────────
-  // STATES
-  // ─────────────────────────────────────────────────────────────
+  /* ================= STATE ================= */
   bookings: [],
-  meta: null,           // Thông tin phân trang (page, pageSize, pages, total)
+  myBookings: [],
   currentBooking: null,
-
-  slots: [],
-  bookedSlots: [],      // Lưu trữ danh sách các slot không khả dụng (đã bị đặt)
+  unavailableSlots: [],
+  meta: null,
 
   loading: false,
-  loadingDetail: false,
-  loadingSlots: false,
-  submitting: false,
-
   error: null,
 
-  // ─────────────────────────────────────────────────────────────
-  // FETCH BOOKINGS
-  // ─────────────────────────────────────────────────────────────
-  fetchBookings: async () => {
+  /* ================= COMMON ================= */
+  setLoading: (loading) => set({ loading }),
+  setError: (error) => set({ error }),
+  clearError: () => set({ error: null }),
+
+  /* ================= ADMIN ================= */
+  fetchBookings: async (params = {}, options = {}) => {
     try {
-      set({
-        loading: true,
-        error: null,
-      });
+      set({ loading: true, error: null });
 
-      const res = await BookingService.getBookings();
-
-      // SỬA: đồng bộ cấu trúc mock mới — data bọc trong res.data.result (giống orderStore)
-      set({
-        bookings: res?.success ? res.data?.result || [] : [],
-        meta: res?.success ? res.data?.meta || null : null,
-      });
-    } catch (err) {
-      console.error("fetchBookings error:", err);
+      const res = await BookingService.getBookings(params, options);
 
       set({
-        bookings: [],
-        error: err.message,
-      });
-    } finally {
-      set({
+        bookings: res?.data?.result || [],
+        meta: res?.data?.meta || null,
         loading: false,
       });
-    }
-  },
-
-  // ─────────────────────────────────────────────────────────────
-  // FETCH BOOKING DETAIL
-  // ─────────────────────────────────────────────────────────────
-  fetchBookingDetail: async (bookingId) => {
-    try {
-      set({
-        loadingDetail: true,
-        currentBooking: null,
-        error: null,
-      });
-
-      const res = await BookingService.getBookingById(bookingId);
-
-      set({
-        currentBooking:
-          res?.success && res.data ? res.data : null,
-      });
-    } catch (err) {
-      console.error("fetchBookingDetail error:", err);
-
-      set({
-        currentBooking: null,
-        error: err.message,
-      });
-    } finally {
-      set({
-        loadingDetail: false,
-      });
-    }
-  },
-
-  // Alias để tương thích với các component cũ
-  fetchBookingById: async (bookingId) => {
-    return get().fetchBookingDetail(bookingId);
-  },
-
-  clearCurrentBooking: () =>
-    set({
-      currentBooking: null,
-    }),
-
-  // ─────────────────────────────────────────────────────────────
-  // FETCH UNAVAILABLE SLOTS (MỚI BỔ SUNG)
-  // ─────────────────────────────────────────────────────────────
-  fetchUnavailableSlots: async (params = {}) => {
-    try {
-      set({
-        loadingSlots: true,
-        error: null,
-      });
-
-      const res = await BookingService.getUnavailableSlots(params);
-
-      set({
-        bookedSlots: res?.success ? res.data || [] : [],
-      });
-    } catch (err) {
-      console.error("fetchUnavailableSlots error:", err);
-      set({
-        bookedSlots: [],
-        error: err.message,
-      });
-    } finally {
-      set({
-        loadingSlots: false,
-      });
-    }
-  },
-
-  // ─────────────────────────────────────────────────────────────
-  // BOOKING REVIEW LOGIC
-  // ─────────────────────────────────────────────────────────────
-
-  /**
-   * Đánh dấu booking đã được đánh giá
-   *
-   * Dùng sau khi:
-   * createBookingReview()
-   * thành công
-   */
-  markBookingReviewed: (bookingId) => {
-    set((state) => ({
-      currentBooking:
-        state.currentBooking?.id === Number(bookingId)
-          ? {
-              ...state.currentBooking,
-              reviewed: true,
-            }
-          : state.currentBooking,
-
-      bookings: state.bookings.map((booking) =>
-        booking.id === Number(bookingId)
-          ? {
-              ...booking,
-              reviewed: true,
-            }
-          : booking
-      ),
-    }));
-  },
-
-  // ─────────────────────────────────────────────────────────────
-  // CREATE BOOKING
-  // ─────────────────────────────────────────────────────────────
-  createBooking: async (formData) => {
-    try {
-      set({
-        submitting: true,
-        error: null,
-      });
-
-      const res =
-        await BookingService.createBooking(formData);
-
-      if (res?.success) {
-        get().fetchBookings();
-      }
 
       return res;
     } catch (err) {
-      console.error("createBooking error:", err);
-
-      return {
-        success: false,
-        message:
-          "Đã xảy ra lỗi hệ thống khi xử lý. Xin thử lại sau!",
-      };
-    } finally {
-      set({
-        submitting: false,
-      });
+      set({ error: err.message, loading: false });
     }
   },
 
-  // ─────────────────────────────────────────────────────────────
-  // CANCEL BOOKING
-  // ─────────────────────────────────────────────────────────────
-  cancelBooking: async (bookingId) => {
+  /* ================= DETAIL ================= */
+  fetchBookingById: async (id, options = {}) => {
     try {
+      set({ loading: true });
+
+      const res = await BookingService.getBookingById(id, options);
+
       set({
-        submitting: true,
-        error: null,
+        currentBooking: res?.data || null,
+        loading: false,
       });
 
-      await BookingService.cancelBooking(bookingId);
+      return res;
+    } catch (err) {
+      set({ error: err.message, loading: false });
+    }
+  },
+
+  /* ================= MY BOOKINGS ================= */
+  fetchMyBookings: async (params = {}, options = {}) => {
+    try {
+      set({ loading: true });
+
+      const res = await BookingService.getMyBookings(params, options);
+      console.log("booking from store: ", res);
+      
+      set({
+        myBookings: res?.data?.result || [],
+        meta: res?.data?.meta || null,
+        loading: false,
+      });
+
+      return res;
+    } catch (err) {
+      set({ error: err.message, loading: false });
+    }
+  },
+
+  /* ================= UNAVAILABLE ================= */
+  fetchUnavailableSlots: async (params = {}, options = {}) => {
+    try {
+      const res = await BookingService.getUnavailableSlots(params, options);
+
+      set({
+        unavailableSlots: res?.data || [],
+      });
+      console.log("unavailable: ", res);
+      return res;
+    } catch (err) {
+      set({ error: err.message });
+    }
+  },
+
+  /* ================= CREATE ================= */
+  createBooking: async (data, options = {}) => {
+    try {
+      set({ loading: true, error: null });
+
+      const res = await BookingService.createBooking(data, options);
+
+      const booking = res?.data;
 
       set((state) => ({
-        currentBooking:
-          state.currentBooking?.id === bookingId
-            ? {
-                ...state.currentBooking,
-                status: "CANCELLED",
-              }
-            : state.currentBooking,
-
-        bookings: state.bookings.map((booking) =>
-          booking.id === bookingId
-            ? {
-                ...booking,
-                status: "CANCELLED",
-              }
-            : booking
-        ),
+        bookings: booking ? [booking, ...state.bookings] : state.bookings,
+        myBookings: booking ? [booking, ...state.myBookings] : state.myBookings,
+        loading: false,
       }));
 
-      return {
-        success: true,
-      };
+      return res;
     } catch (err) {
-      console.error("cancelBooking error:", err);
-
-      return {
-        success: false,
-        message:
-          "Hủy lịch thất bại, vui lòng thử lại sau.",
-      };
-    } finally {
-      set({
-        submitting: false,
-      });
+      set({ error: err.message, loading: false });
     }
   },
+
+  /* ================= CANCEL ================= */
+  cancelBooking: async (id, options = {}) => {
+    try {
+      const res = await BookingService.cancelBooking(id, options);
+
+      set((state) => ({
+        bookings: state.bookings.map((b) =>
+          String(b.id) === String(id)
+            ? { ...b, status: "CANCELLED" }
+            : b
+        ),
+        myBookings: state.myBookings.map((b) =>
+          String(b.id) === String(id)
+            ? { ...b, status: "CANCELLED" }
+            : b
+        ),
+        currentBooking:
+          String(state.currentBooking?.id) === String(id)
+            ? { ...state.currentBooking, status: "CANCELLED" }
+            : state.currentBooking,
+      }));
+
+      return res;
+    } catch (err) {
+      set({ error: err.message });
+    }
+  },
+
+  /* ================= UPDATE ================= */
+  updateBookingStatus: async (id, status, options = {}) => {
+    try {
+      const res = await BookingService.updateBookingStatus(
+        id,
+        status,
+        options
+      );
+
+      set((state) => ({
+        bookings: state.bookings.map((b) =>
+          String(b.id) === String(id) ? { ...b, status } : b
+        ),
+        myBookings: state.myBookings.map((b) =>
+          String(b.id) === String(id) ? { ...b, status } : b
+        ),
+        currentBooking:
+          String(state.currentBooking?.id) === String(id)
+            ? { ...state.currentBooking, status }
+            : state.currentBooking,
+      }));
+
+      return res;
+    } catch (err) {
+      set({ error: err.message });
+    }
+  },
+
+  /* ================= UTIL ================= */
+  setCurrentBooking: (b) => set({ currentBooking: b }),
+  clearBookings: () => set({ bookings: [], myBookings: [] }),
 }));

@@ -16,11 +16,11 @@ const BookingList = () => {
   const navigate = useNavigate();
   
   // Lấy dữ liệu và các hàm cần thiết từ useBookingStore
-  const { bookings, loading, fetchBookings } = useBookingStore();
+  const { myBookings, loading, fetchMyBookings } = useBookingStore();
 
   useEffect(() => {
-    fetchBookings();
-  }, [fetchBookings]);
+    fetchMyBookings();
+  }, [fetchMyBookings]);
 
   if (loading) return <Loading fullScreen />;
 
@@ -35,14 +35,14 @@ const BookingList = () => {
       <div className="container mx-auto px-4 max-w-4xl">
         <h1 className="text-3xl font-black text-pet-blue mb-8">Lịch sử đặt lịch</h1>
 
-        {bookings.length === 0 ? (
+        {myBookings.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-3xl border border-gray-100 shadow-sm">
             <p className="text-gray-500 mb-6">Bạn chưa có lịch đặt nào.</p>
             <Link to="/spa"><Button className="font-bold rounded-xl">Đặt lịch ngay</Button></Link>
           </div>
         ) : (
           <div className="space-y-4">
-            {bookings.map((booking) => {
+            {myBookings.map((booking) => {
               const statusInfo = getStatusConfig(booking.status);
               
               // Đồng bộ thông tin thời gian từ bản ghi đặt lịch

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, ShoppingCart, ShieldCheck, Minus, Plus } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, ShieldCheck, Minus, Plus, ImageIcon } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/ui/Badge';
 import Loading from '../../components/common/Loading';
@@ -8,6 +8,7 @@ import { formatPrice } from '../../utils/formatPrice';
 
 import { useCartStore } from '../../store/cartStore';
 import { useProductStore } from '../../store/productStore';
+import { useProductImageStore } from '../../store/productImageStore';
 import { useReviewStore } from '../../store/reviewStore';
 
 import ReviewProduct from '../review/ReviewProduct';
@@ -30,30 +31,48 @@ const ProductDetail = () => {
     reviews,
     loading: reviewLoading,
     getProductReviews,
-    clearReviews,
+    clearReviews, 
   } = useReviewStore();
 
-  // Fetch product detail
+  const {
+    images: storeImages,
+    loading: imagesLoading,
+    fetchImages,
+  } = useProductImageStore();
+
+  // Fetch thông tin chi tiết sản phẩm
   useEffect(() => {
     if (id) fetchProductById(id);
     return () => clearCurrentProduct?.();
   }, [id, fetchProductById, clearCurrentProduct]);
 
-  // Fetch reviews khi có product
+  // Fetch danh sách hình ảnh từ store mới
+  useEffect(() => {
+    if (id) fetchImages(id);
+  }, [id, fetchImages]);
+
+  // Fetch reviews khi sản phẩm tải thành công
   useEffect(() => {
     if (product?.id) {
       getProductReviews(product.id);
     }
-    return () => clearReviews();
+    return () => clearReviews?.(); 
   }, [product?.id, getProductReviews, clearReviews]);
 
-  // Sync ảnh thumbnail
+  // Gom danh sách ảnh hiển thị
+  const galleryImages = storeImages && storeImages.length > 0
+    ? storeImages.map(img => img.imageUrl).filter(Boolean)
+    : product?.images?.map(img => img.imageUrl).filter(Boolean) || [];
+
+  // 🔥 SỬA LỖI TẠI ĐÂY: Đồng bộ ảnh hiển thị chính mặc định (Chỉ chạy khi có mảng ảnh mới từ API)
   useEffect(() => {
-    if (product?.images?.length > 0) {
-      const thumbnail = product.images.find(img => img.isThumbnail) || product.images[0];
-      setActiveImage(thumbnail.imageUrl);
+    if (galleryImages.length > 0) {
+      // Ưu tiên tìm ảnh thumbnail từ storeImages trước
+      const thumbnailImg = storeImages?.find(img => img.isThumbnail);
+      const defaultImage = thumbnailImg?.imageUrl || galleryImages[0];
+      setActiveImage(defaultImage);
     }
-  }, [product]);
+  }, [storeImages, product?.id]); // 🌟 Dùng product.id và storeImages thay vì dùng mảng galleryImages để tránh lặp vô hạn
 
   const handleAddToCart = () => {
     if (!product) return;
@@ -72,11 +91,10 @@ const ProductDetail = () => {
   if (!product) return <div className="pt-32 text-center font-bold">Sản phẩm không tồn tại.</div>;
 
   const isOutOfStock = product.stockQuantity <= 0 || product.status === 'OUT_OF_STOCK';
-  const galleryImages = product.images?.map(img => img.imageUrl).filter(Boolean) || [];
 
   return (
     <div className="min-h-screen bg-white pt-10 pb-20 text-left">
-      <div className="container mx-auto px-20 lg:px-60">
+      <div className="container mx-auto px-6 lg:px-24 xl:px-48">
 
         <Link
           to="/shop"
@@ -86,27 +104,34 @@ const ProductDetail = () => {
         </Link>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-          {/* CỘT TRÁI: GALLERY - Đồng bộ phong cách ServiceDetail */}
+          
+          {/* CỘT TRÁI: KHU VỰC HÌNH ẢNH */}
           <div className="flex flex-col gap-4">
-            {/* Khung hiển thị ảnh lớn - Fill ảnh đầy thẻ, bo góc tròn trịa */}
-            <div className="aspect-square w-full rounded-[32px] overflow-hidden border border-gray-100 bg-gray-50 shadow-inner">
-              <img
-                src={activeImage || galleryImages[0] || 'https://placehold.co/500x500'}
-                alt={product.name}
-                className="w-full h-full object-cover transition-all duration-300 transform hover:scale-105"
-              />
+            <div className="aspect-square w-full rounded-3xl overflow-hidden border border-gray-100 bg-gray-50 shadow-inner relative">
+              {imagesLoading ? (
+                <div className="w-full h-full flex items-center justify-center bg-gray-50 text-gray-400 animate-pulse">
+                  <ImageIcon size={32} />
+                </div>
+              ) : (
+                <img
+                  src={activeImage || 'https://placehold.co/500x500'}
+                  alt={product.name}
+                  className="w-full h-full object-cover transition-all duration-300 transform hover:scale-105"
+                />
+              )}
             </div>
 
-            {/* Thanh trượt ảnh phụ - Fill đầy và bo góc mượt mà */}
-            {galleryImages.length > 1 && (
+            {/* Thanh trượt danh sách ảnh phụ */}
+            {!imagesLoading && galleryImages.length > 1 && (
               <div className="flex gap-3 overflow-x-auto pb-2 pt-1 scrollbar-thin">
                 {galleryImages.map((imgUrl, index) => (
                   <button
                     key={index}
-                    onClick={() => setActiveImage(imgUrl)}
+                    type="button"
+                    onClick={() => setActiveImage(imgUrl)} // 🌟 Giờ đây nút bấm đã ăn trạng thái mượt mà không lo bị ghi đè
                     className={`relative w-24 h-24 flex-shrink-0 bg-gray-50 rounded-2xl border-2 transition-all duration-200 overflow-hidden ${
                       activeImage === imgUrl
-                        ? 'border-pet-orange shadow-md scale-[0.95]'
+                        ? 'border-orange-500 shadow-md scale-[0.95]'
                         : 'border-transparent opacity-70 hover:opacity-100'
                     }`}
                   >
@@ -121,7 +146,7 @@ const ProductDetail = () => {
             )}
           </div>
 
-          {/* CỘT PHẢI: THÔNG TIN SẢN PHẨM */}
+          {/* CỘT PHẢI: THÔNG TIN CHI TIẾT */}
           <div className="flex flex-col">
             <div className="flex flex-wrap gap-2 mb-4">
               <Badge variant="primary" className="w-fit">Mã SKU: {product.id}</Badge>
@@ -134,12 +159,13 @@ const ProductDetail = () => {
 
             <h1 className="text-4xl font-black text-pet-blue mb-4 leading-tight">{product.name}</h1>
             <p className="text-3xl font-black text-pet-orange mb-6">{formatPrice(product.price)}</p>
-
             <p className="text-gray-600 mb-8 leading-relaxed font-medium">{product.description}</p>
 
+            {/* Số lượng & Nút Thêm vào giỏ */}
             <div className="flex flex-wrap items-center gap-4 mb-8">
               <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden bg-white">
                 <button
+                  type="button"
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
                   disabled={isOutOfStock}
                   className="px-4 py-3 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -150,6 +176,7 @@ const ProductDetail = () => {
                   {isOutOfStock ? 0 : quantity}
                 </span>
                 <button
+                  type="button"
                   onClick={() =>
                     setQuantity(prev =>
                       product.stockQuantity && prev >= product.stockQuantity ? prev : prev + 1
@@ -176,6 +203,7 @@ const ProductDetail = () => {
               </Button>
             </div>
 
+            {/* Tình trạng kho hàng */}
             <div className={`flex items-center gap-3 font-bold ${isOutOfStock ? 'text-red-500' : 'text-green-600'}`}>
               <ShieldCheck size={20} />
               <span>
@@ -187,8 +215,8 @@ const ProductDetail = () => {
           </div>
         </div>
 
-        {/* Reviews */}
-        <div className="mt-0 pt-8 border-t border-gray-100">
+        {/* Khu vực đánh giá sản phẩm */}
+        <div className="mt-12 pt-8 border-t border-gray-100">
           <ReviewProduct reviews={reviews} loading={reviewLoading} />
         </div>
 

@@ -38,30 +38,63 @@ const getCategories = async (
       { params }
     );
 
-    return resp.data;
+    const categories =
+      resp.data?.data || [];
+
+    return {
+      success:
+        resp.data?.status === "SUCCESS",
+
+      message:
+        resp.data?.message ||
+        "Get categories successfully",
+
+      data: {
+        result: categories,
+        meta: {
+          page: 1,
+          pageSize: categories.length,
+          total: categories.length,
+          pages: 1,
+        },
+      },
+    };
   }
 
   await delay(500);
 
   let result = [...categoryMock.result];
+
   const { keyword, type } = params;
 
-  if (keyword) { result = result.filter((cat) => cat.name?.toLowerCase().includes(keyword.toLowerCase())); }
-  // FILTER by type (PRODUCT | SERVICE) 
-  if (type) { result = result.filter( (cat) => cat.categoryType === type ); }
-  
-console.log("result from service: ", result);
+  if (keyword) {
+    result = result.filter((cat) =>
+      cat.name
+        ?.toLowerCase()
+        .includes(
+          keyword.toLowerCase()
+        )
+    );
+  }
+
+  if (type) {
+    result = result.filter(
+      (cat) =>
+        cat.categoryType === type
+    );
+  }
+
   return {
     success: true,
     message:
       categoryMock.message ||
       "Get categories successfully",
     data: {
+      result,
       meta: {
         ...(categoryMock.meta || {}),
         total: result.length,
       },
-      result,
     },
   };
 };
@@ -83,14 +116,21 @@ const getCategoryById = async (
       )
     );
 
-    return resp.data;
+    return {
+      success:
+        resp.data?.status === "SUCCESS",
+      message:
+        resp.data?.message || "",
+      data: resp.data?.data || null,
+    };
   }
 
   await delay(300);
 
   const category =
     categoryMock.result.find(
-      (item) => item.id === Number(id)
+      (item) =>
+        item.id === Number(id)
     ) || null;
 
   return {
@@ -117,35 +157,29 @@ const createCategory = async (
       categoryData
     );
 
-    return resp.data;
+    return {
+      success:
+        resp.data?.status === "SUCCESS",
+      message:
+        resp.data?.message || "",
+      data: resp.data?.data,
+    };
   }
 
   await delay(400);
 
   return {
     success: true,
-    message: "Create category successfully",
+    message:
+      "Create category successfully",
     data: {
       id: Date.now(),
-
       name: categoryData.name,
-
-      type: categoryData.type,
-
-      description:
-        categoryData.description || "",
+      categoryType:
+        categoryData.categoryType,
 
       activeFlag: true,
       deleteFlag: false,
-
-      createdBy: "admin@gmail.com",
-      lastModifiedBy: "admin@gmail.com",
-
-      createdDate:
-        new Date().toISOString(),
-
-      lastModifiedDate:
-        new Date().toISOString(),
     },
   };
 };
@@ -169,24 +203,24 @@ const updateCategory = async (
       }
     );
 
-    return resp.data;
+    return {
+      success:
+        resp.data?.status === "SUCCESS",
+      message:
+        resp.data?.message || "",
+      data: resp.data?.data,
+    };
   }
 
   await delay(400);
 
   return {
     success: true,
-    message: "Update category successfully",
+    message:
+      "Update category successfully",
     data: {
       id: Number(id),
-
       ...categoryData,
-
-      lastModifiedBy:
-        "staff@gmail.com",
-
-      lastModifiedDate:
-        new Date().toISOString(),
     },
   };
 };
@@ -208,7 +242,13 @@ const deleteCategory = async (
       )
     );
 
-    return resp.data;
+    return {
+      success:
+        resp.data?.status === "SUCCESS",
+      message:
+        resp.data?.message || "",
+      data: resp.data?.data,
+    };
   }
 
   await delay(300);

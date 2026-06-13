@@ -30,14 +30,13 @@ const BookingDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  // ─── ZUSTAND STORE STATES & ACTIONS ────────────────────────────────────────
+  // ─── ĐỒNG BỘ ZUSTAND STORE THEO CẤU TRÚC MỚI ────────────────────────────────
   const {
     currentBooking,
-    loadingDetail,
-    submitting,
-    fetchBookingDetail,
+    loading, 
+    fetchBookingById, 
     cancelBooking,
-    clearCurrentBooking
+    setCurrentBooking 
   } = useBookingStore();
 
   // ─── LOCAL UI STATES ───────────────────────────────────────────────────────
@@ -46,24 +45,25 @@ const BookingDetail = () => {
   // Khởi chạy đồng bộ hóa dữ liệu từ Store khi mount/unmount component
   useEffect(() => {
     if (id) {
-      fetchBookingDetail(id);
+      fetchBookingById(id);
     }
     
     return () => {
-      clearCurrentBooking();
+      setCurrentBooking(null); 
     };
-  }, [id, fetchBookingDetail, clearCurrentBooking]);
+  }, [id, fetchBookingById, setCurrentBooking]);
 
   // Xử lý sự kiện hủy đặt lịch
   const handleConfirmCancel = async () => {
     const bookingIdToCancel = currentBooking?.id || id;
     const response = await cancelBooking(bookingIdToCancel);
     
-    if (response?.success) {
+    // Kiểm tra kết quả phản hồi từ API BookingService
+    if (response) {
       setIsCancelModalOpen(false);
       alert("Đã hủy lịch hẹn thành công.");
     } else {
-      alert(response?.message || "Hủy lịch thất bại, vui lòng thử lại sau.");
+      alert("Hủy lịch thất bại hoặc đã xảy ra lỗi từ hệ thống.");
     }
   };
 
@@ -73,7 +73,7 @@ const BookingDetail = () => {
     window.open(`https://zalo.me/${zaloNumber}?text=${message}`, '_blank');
   };
 
-  if (loadingDetail) return <Loading fullScreen />;
+  if (loading && !currentBooking) return <Loading fullScreen />;
   
   if (!currentBooking || !currentBooking.id) {
     return (
@@ -91,7 +91,7 @@ const BookingDetail = () => {
     id: bookingId,
     userName: customerName,
     status: currentStatus,
-    paymentStatus = 'PENDING', // Dự phòng nếu API bổ sung trường này sau
+    paymentStatus = 'PENDING', 
     bookingDate,
     startTime,
     endTime,
@@ -279,16 +279,16 @@ const BookingDetail = () => {
               variant="outline" 
               className="flex-1 rounded-xl !py-3 font-bold text-gray-500"
               onClick={() => setIsCancelModalOpen(false)}
-              disabled={submitting}
+              disabled={loading}
             >
               Đóng lại
             </Button>
             <Button 
               className="flex-1 rounded-xl !py-3 bg-red-500 hover:bg-red-600 text-white font-bold border-none shadow-md shadow-red-500/10"
               onClick={handleConfirmCancel}
-              disabled={submitting}
+              disabled={loading}
             >
-              {submitting ? "ĐANG HỦY..." : "XÁC NHẬN HỦY"}
+              {loading ? "ĐANG HỦY..." : "XÁC NHẬN HỦY"}
             </Button>
           </div>
         </div>

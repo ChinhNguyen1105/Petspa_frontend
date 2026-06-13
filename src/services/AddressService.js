@@ -1,78 +1,67 @@
-import { addressList } from "../assets/data/mocks/order/addressList";
-
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+import api from "./api";
+import { URL_CONSTANT } from "../constants/urlConstant";
 
 /*
 |--------------------------------------------------------------------------
-| SHIPPING ADDRESS SERVICES
+| SHIPPING ADDRESS SERVICES (REAL API)
 |--------------------------------------------------------------------------
 */
 
 // 1. Lấy danh sách địa chỉ nhận hàng
 const getAddresses = async () => {
-  await delay(400);
-  return {
-    success: true,
-    message: addressList.message || "Get addresses successfully",
-    data: [...addressList.data], // Đồng bộ sử dụng biến addressList mới
-  };
+  const response = await api.get(
+    URL_CONSTANT.ShippingAddress.GET_SHIPPING_ADDRESSES
+  );
+  return response.data;
 };
 
 // 2. Thêm mới một địa chỉ
-const createAddress = async (addressData) => {
-  await delay(500);
-  console.log("Service: Nhận yêu cầu THÊM địa chỉ:", addressData);
-
-  const fullAddress = `${addressData.addressDetail}, ${addressData.ward}, ${addressData.district}, ${addressData.province}`;
-
-  return {
-    success: true,
-    message: "Create address successfully",
-    data: {
-      id: Date.now(), // Tạo ID ngẫu nhiên bằng timestamp
-      ...addressData,
-      fullAddress,
-      isDefault: addressData.isDefault || false,
-    },
+const createAddress = async (data) => {
+  const payload = {
+    fullName: data.recipient_name,
+    phone: data.phone_number,
+    province: data.province_city,
+    district: data.district_ward,
+    ward: data.district_ward,
+    addressDetail: data.detail_address,
+    isDefault: data.isDefault ?? false,
   };
+
+  return api.post(
+    URL_CONSTANT.ShippingAddress.CREATE_SHIPPING_ADDRESS,
+    payload
+  );
 };
 
 // 3. Cập nhật thông tin địa chỉ
 const updateAddress = async (id, addressData) => {
-  await delay(500);
-  console.log(`Service: Nhận yêu cầu CẬP NHẬT địa chỉ [ID: ${id}]:`, addressData);
-
-  const fullAddress = `${addressData.addressDetail}, ${addressData.ward}, ${addressData.district}, ${addressData.province}`;
-
-  return {
-    success: true,
-    message: "Update address successfully",
-    data: {
-      id: Number(id),
+  const response = await api.put(
+    URL_CONSTANT.ShippingAddress.UPDATE_SHIPPING_ADDRESS,
+    {
+      id,
       ...addressData,
-      fullAddress,
-    },
-  };
+    }
+  );
+
+  return response.data;
 };
 
 // 4. Xóa một địa chỉ
 const deleteAddress = async (id) => {
-  await delay(400);
-  console.log(`Service: Nhận yêu cầu XÓA địa chỉ [ID: ${id}]`);
-  return {
-    success: true,
-    message: `Delete address #${id} successfully`,
-  };
+  const response = await api.delete(
+    URL_CONSTANT.ShippingAddress.DELETE_SHIPPING_ADDRESS.replace("{id}", id)
+  );
+
+  return response.data;
 };
 
 // 5. Thiết lập một địa chỉ làm mặc định
 const setDefaultAddress = async (id) => {
-  await delay(300);
-  console.log(`Service: Đặt địa chỉ [ID: ${id}] làm mặc định`);
-  return {
-    success: true,
-    message: "Set default address successfully",
-  };
+  const response = await api.patch(
+    URL_CONSTANT.ShippingAddress.SET_DEFAULT_ADDRESS.replace("{id}", id)
+  );
+
+  return response.data;
 };
 
 export default {

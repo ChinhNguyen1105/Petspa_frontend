@@ -1,52 +1,65 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, UploadCloud, X } from 'lucide-react';
+import { Camera, UploadCloud, X, Eye, EyeOff } from 'lucide-react';
 
 const UserFormAdmin = ({ initialData, onSubmit, onClose }) => {
+  const isEditMode = !!initialData?.id; // Xác định đang Sửa hay Thêm mới
+
   const [formData, setFormData] = useState({
-    full_name: '',
+    name: '',
     email: '',
     phone: '',
     avatar: '',
-    roleName: 'CUSTOMER',
-    status: 'ACTIVE'
+    roleId: 3, 
+    activeFlag: true,
+    gender: '', 
+    dateOfBirth: '', 
+    password: '' 
   });
 
   const [errors, setErrors] = useState({});
+  const [showPassword, setShowPassword] = useState(false); 
   const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (initialData) {
+      let formattedDate = '';
+      if (initialData.dateOfBirth && initialData.dateOfBirth !== 'undefined') {
+        formattedDate = initialData.dateOfBirth.split('T')[0];
+      }
+
       setFormData({
-        full_name: initialData.full_name || '',
+        name: initialData.name || '',
         email: initialData.email || '',
         phone: initialData.phone || '',
         avatar: initialData.avatar || '',
-        roleName: initialData.role?.name || 'CUSTOMER',
-        status: initialData.status || 'ACTIVE'
+        roleId: initialData.roleId || 3,
+        activeFlag: initialData.activeFlag !== undefined ? initialData.activeFlag : true,
+        gender: initialData.gender && initialData.gender !== 'undefined' ? initialData.gender : '',
+        dateOfBirth: formattedDate,
+        password: '' 
       });
     }
   }, [initialData]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    const targetValue = name === 'activeFlag' ? value === 'true' : value;
+    
+    setFormData(prev => ({ ...prev, [name]: targetValue }));
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
   };
 
-  // Xử lý đọc file ảnh chuyển thành chuỗi Base64 để lưu/xem trước
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Kiểm tra định dạng file
     if (!file.type.startsWith('image/')) {
       setErrors(prev => ({ ...prev, avatar: 'Vui lòng chọn file định dạng ảnh hợp lệ!' }));
       return;
     }
 
-    // Kiểm tra dung lượng (Ví dụ giới hạn 2MB)
     if (file.size > 2 * 1024 * 1024) {
       setErrors(prev => ({ ...prev, avatar: 'Kích thước ảnh không vượt quá 2MB' }));
       return;
@@ -60,7 +73,6 @@ const UserFormAdmin = ({ initialData, onSubmit, onClose }) => {
     reader.readAsDataURL(file);
   };
 
-  // Xóa ảnh hiện tại
   const handleRemoveAvatar = () => {
     setFormData(prev => ({ ...prev, avatar: '' }));
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -68,7 +80,7 @@ const UserFormAdmin = ({ initialData, onSubmit, onClose }) => {
 
   const validateForm = () => {
     const newErrors = {};
-    if (!formData.full_name.trim()) newErrors.full_name = 'Họ và tên không được để trống';
+    if (!formData.name.trim()) newErrors.name = 'Họ và tên không được để trống';
     
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!formData.email.trim()) {
@@ -83,36 +95,48 @@ const UserFormAdmin = ({ initialData, onSubmit, onClose }) => {
       newErrors.phone = 'Số điện thoại chưa đúng cấu trúc';
     }
 
+    if (!isEditMode && !formData.password) {
+      newErrors.password = 'Mật khẩu bắt buộc nhập đối với tài khoản mới';
+    } else if (formData.password && formData.password.length < 6) {
+      newErrors.password = 'Mật khẩu phải chứa ít nhất 6 ký tự';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    const roleMap = {
-      ADMIN: { id: 1, name: 'ADMIN' },
-      STAFF: { id: 2, name: 'STAFF' }, 
-      CUSTOMER: { id: 3, name: 'CUSTOMER' }
-    };
-
-    const finalPayload = {
+    const rawPayload = {
       ...initialData, 
-      full_name: formData.full_name,
+      name: formData.name,
       email: formData.email,
       phone: formData.phone,
-      avatar: formData.avatar || "https://placehold.co/100x100",
-      role: roleMap[formData.roleName],
-      status: formData.status
+      avatar: formData.avatar || "",
+      roleId: Number(formData.roleId),
+      activeFlag: formData.activeFlag,
+      gender: formData.gender || undefined,
+      dateOfBirth: formData.dateOfBirth ? `${formData.dateOfBirth}T00:00:00` : undefined,
+      password: formData.password ? formData.password : (isEditMode ? initialData?.password : undefined)
     };
 
-    onSubmit(finalPayload);
+    const finalPayload = Object.fromEntries(
+      Object.entries(rawPayload).filter(([_, value]) => value !== undefined)
+    );
+
+    try {
+      // Quyền quyết định đóng form được chuyển giao hoàn toàn lên cha qua hàm này
+      await onSubmit(finalPayload); 
+    } catch (error) {
+      console.error("Lỗi khi xử lý form:", error);
+    }
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 p-2">
-      {/* KHU VỰC CHỌN VÀ HIỂN THỊ ẢNH ĐẠI DIỆN */}
+      {/* 1. KHU VỰC CHỌN VÀ HIỂN THỊ ẢNH ĐẠI DIỆN */}
       <div className="flex flex-col items-center justify-center p-4 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
         <label className="text-sm font-bold text-gray-700 mb-3 w-full text-left">Ảnh đại diện</label>
         
@@ -128,7 +152,6 @@ const UserFormAdmin = ({ initialData, onSubmit, onClose }) => {
             )}
           </div>
 
-          {/* Nút trigger chọn file đè lên hình tròn */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -138,7 +161,6 @@ const UserFormAdmin = ({ initialData, onSubmit, onClose }) => {
             <Camera size={16} />
           </button>
 
-          {/* Nút xóa ảnh nếu có dữ liệu */}
           {formData.avatar && (
             <button
               type="button"
@@ -151,7 +173,6 @@ const UserFormAdmin = ({ initialData, onSubmit, onClose }) => {
           )}
         </div>
 
-        {/* Nút chọn ảnh phụ dưới khu vực preview */}
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
@@ -160,7 +181,6 @@ const UserFormAdmin = ({ initialData, onSubmit, onClose }) => {
           {formData.avatar ? "Thay đổi ảnh khác" : "Chọn tệp từ máy tính"}
         </button>
 
-        {/* File Input ẩn */}
         <input 
           type="file"
           ref={fileInputRef}
@@ -172,20 +192,20 @@ const UserFormAdmin = ({ initialData, onSubmit, onClose }) => {
         {errors.avatar && <p className="text-xs text-red-500 font-medium mt-1">{errors.avatar}</p>}
       </div>
 
-      {/* CÁC TRƯỜNG THÔNG TIN CÒN LẠI */}
+      {/* 2. CÁC TRƯỜNG THÔNG TIN Ô NHẬP */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Full Name */}
+        {/* Name */}
         <div className="space-y-1.5">
           <label className="text-sm font-bold text-gray-700">Họ và tên *</label>
           <input 
             type="text" 
-            name="full_name"
-            value={formData.full_name}
+            name="name"
+            value={formData.name}
             onChange={handleChange}
             placeholder="Nhập họ và tên thành viên"
-            className={`w-full px-4 py-2.5 bg-gray-50 border ${errors.full_name ? 'border-red-500' : 'border-gray-200'} rounded-xl text-sm focus:outline-none focus:border-orange-500`}
+            className={`w-full px-4 py-2.5 bg-white border ${errors.name ? 'border-red-500' : 'border-gray-200'} rounded-xl text-sm focus:outline-none focus:border-orange-500`}
           />
-          {errors.full_name && <p className="text-xs text-red-500 font-medium">{errors.full_name}</p>}
+          {errors.name && <p className="text-xs text-red-500 font-medium">{errors.name}</p>}
         </div>
 
         {/* Email */}
@@ -197,7 +217,7 @@ const UserFormAdmin = ({ initialData, onSubmit, onClose }) => {
             value={formData.email}
             onChange={handleChange}
             placeholder="example@petspa.vn"
-            className={`w-full px-4 py-2.5 bg-gray-50 border ${errors.email ? 'border-red-500' : 'border-gray-200'} rounded-xl text-sm focus:outline-none focus:border-orange-500`}
+            className={`w-full px-4 py-2.5 bg-white border ${errors.email ? 'border-red-500' : 'border-gray-200'} rounded-xl text-sm focus:outline-none focus:border-orange-500`}
           />
           {errors.email && <p className="text-xs text-red-500 font-medium">{errors.email}</p>}
         </div>
@@ -211,38 +231,90 @@ const UserFormAdmin = ({ initialData, onSubmit, onClose }) => {
             value={formData.phone}
             onChange={handleChange}
             placeholder="Nhập số điện thoại liên lạc"
-            className={`w-full px-4 py-2.5 bg-gray-50 border ${errors.phone ? 'border-red-500' : 'border-gray-200'} rounded-xl text-sm focus:outline-none focus:border-orange-500`}
+            className={`w-full px-4 py-2.5 bg-white border ${errors.phone ? 'border-red-500' : 'border-gray-200'} rounded-xl text-sm focus:outline-none focus:border-orange-500`}
           />
           {errors.phone && <p className="text-xs text-red-500 font-medium">{errors.phone}</p>}
         </div>
 
-        {/* Role Select */}
+        {/* Password */}
         <div className="space-y-1.5">
-          <label className="text-sm font-bold text-gray-700">Phân vai trò</label>
-          <select 
-            name="roleName"
-            value={formData.roleName}
+          <label className="text-sm font-bold text-gray-700">
+            Mật khẩu {isEditMode ? "(Bỏ trống nếu không đổi)" : "*"}
+          </label>
+          <div className="relative">
+            <input 
+              type={showPassword ? "text" : "password"} 
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              placeholder={isEditMode ? "••••••••" : "Nhập mật khẩu tài khoản"}
+              className={`w-full pl-4 pr-10 py-2.5 bg-white border ${errors.password ? 'border-red-500' : 'border-gray-200'} rounded-xl text-sm focus:outline-none focus:border-orange-500`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          {errors.password && <p className="text-xs text-red-500 font-medium">{errors.password}</p>}
+        </div>
+
+        {/* Ngày sinh */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-bold text-gray-700">Ngày sinh</label>
+          <input 
+            type="date" 
+            name="dateOfBirth"
+            value={formData.dateOfBirth}
             onChange={handleChange}
-            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 font-semibold text-gray-700"
+            className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 text-gray-700"
+          />
+        </div>
+
+        {/* Giới tính */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-bold text-gray-700">Giới tính</label>
+          <select 
+            name="gender"
+            value={formData.gender}
+            onChange={handleChange}
+            className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 font-semibold text-gray-700"
           >
-            <option value="CUSTOMER">Khách hàng (CUSTOMER)</option>
-            <option value="STAFF">Nhân viên (STAFF)</option>
-            <option value="ADMIN">Quản trị viên (ADMIN)</option>
+            <option value="">-- Chọn giới tính --</option>
+            <option value="MALE">Nam (MALE)</option>
+            <option value="FEMALE">Nữ (FEMALE)</option>
+            <option value="OTHER">Khác (OTHER)</option>
           </select>
         </div>
 
-        {/* Status Select */}
+        {/* Role ID Select */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-bold text-gray-700">Phân vai trò</label>
+          <select 
+            name="roleId"
+            value={formData.roleId}
+            onChange={handleChange}
+            className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 font-semibold text-gray-700"
+          >
+            <option value={1}>Quản trị viên (ADMIN)</option>
+            <option value={2}>Nhân viên (STAFF)</option>
+            <option value={3}>Khách hàng (CUSTOMER)</option>
+          </select>
+        </div>
+
+        {/* Active Flag Select */}
         <div className="space-y-1.5">
           <label className="text-sm font-bold text-gray-700">Trạng thái hoạt động</label>
           <select 
-            name="status"
-            value={formData.status}
+            name="activeFlag"
+            value={formData.activeFlag.toString()}
             onChange={handleChange}
-            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 font-semibold text-gray-700"
+            className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 font-semibold text-gray-700"
           >
-            <option value="ACTIVE">Kích hoạt (ACTIVE)</option>
-            <option value="INACTIVE">Tạm khóa (INACTIVE)</option>
-            <option value="BANNED">Cấm vĩnh viễn (BANNED)</option>
+            <option value="true">Kích hoạt (ACTIVE)</option>
+            <option value="false">Tạm khóa (INACTIVE)</option>
           </select>
         </div>
       </div>

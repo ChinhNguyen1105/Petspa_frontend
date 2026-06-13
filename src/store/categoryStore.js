@@ -9,7 +9,7 @@ export const useCategoryStore = create((set, get) => ({
     page: 1,
     pageSize: 10,
     total: 0,
-    pages: 0,
+    pages: 1,
   },
 
   loading: false,
@@ -17,7 +17,7 @@ export const useCategoryStore = create((set, get) => ({
 
   // filters
   keyword: "",
-  selectedType: "", // PRODUCT | SERVICE
+  selectedType: "",
 
   // ───────────────────────── FILTER ACTIONS ─────────────────────────
   setKeyword: (keyword) => set({ keyword }),
@@ -33,42 +33,68 @@ export const useCategoryStore = create((set, get) => ({
   // ───────────────────────── GET CATEGORIES ─────────────────────────
   fetchCategories: async (overrideParams = {}) => {
     try {
-      set({ loading: true, error: null });
+      set({
+        loading: true,
+        error: null,
+      });
 
       const state = get();
 
       const params = {
         keyword: state.keyword || undefined,
-        type: state.selectedType || undefined, // undefined thay vì null: không gửi key thừa lên API
-        ...overrideParams,                     // luôn đứng cuối để thắng các giá trị trên
+        type: state.selectedType || undefined,
+        ...overrideParams,
       };
 
       const res = await CategoryService.getCategories(params);
-      console.log("categories from store: ", res);
+
+      console.log("categories from store:", res);
+
       if (res?.success) {
+        const categories = res.data?.result || [];
+
         set({
-          categories: res.data?.result || [],
+          categories,
           categoryMeta: res.data?.meta || {
+            page: 1,
+            pageSize: categories.length,
+            total: categories.length,
+            pages: 1,
+          },
+        });
+      } else {
+        set({
+          categories: [],
+          categoryMeta: {
             page: 1,
             pageSize: 10,
             total: 0,
             pages: 0,
           },
         });
-      } else {
-        set({
-          categories: [],
-          categoryMeta: { page: 1, pageSize: 10, total: 0, pages: 0 },
-        });
       }
+
       return res;
     } catch (err) {
       console.error("Lỗi khi load categories:", err);
+
       set({
         categories: [],
-        categoryMeta: { page: 1, pageSize: 10, total: 0, pages: 0 },
-        error: err.message || "Đã xảy ra lỗi khi tải danh mục hệ thống.",
+        categoryMeta: {
+          page: 1,
+          pageSize: 10,
+          total: 0,
+          pages: 0,
+        },
+        error:
+          err?.response?.data?.message ||
+          err.message ||
+          "Đã xảy ra lỗi khi tải danh mục.",
       });
+
+      return {
+        success: false,
+      };
     } finally {
       set({ loading: false });
     }
@@ -81,7 +107,7 @@ export const useCategoryStore = create((set, get) => ({
 
       const res = await CategoryService.createCategory(newCategoryData);
 
-      if (res?.success) {
+      if (res?.status === "SUCCESS") {
         set((state) => ({
           categories: [res.data, ...state.categories],
         }));
@@ -90,7 +116,11 @@ export const useCategoryStore = create((set, get) => ({
       return res;
     } catch (err) {
       console.error("Lỗi create category:", err);
-      return { success: false, message: "System error" };
+
+      return {
+        success: false,
+        message: "System error",
+      };
     } finally {
       set({ loading: false });
     }
@@ -103,10 +133,15 @@ export const useCategoryStore = create((set, get) => ({
 
       const res = await CategoryService.updateCategory(id, updatedData);
 
-      if (res?.success) {
+      if (res?.status === "SUCCESS") {
         set((state) => ({
           categories: state.categories.map((cat) =>
-            cat.id === Number(id) ? { ...cat, ...res.data } : cat
+            cat.id === Number(id)
+              ? {
+                  ...cat,
+                  ...res.data,
+                }
+              : cat,
           ),
         }));
       }
@@ -114,7 +149,11 @@ export const useCategoryStore = create((set, get) => ({
       return res;
     } catch (err) {
       console.error(`Lỗi update category ${id}:`, err);
-      return { success: false, message: "System error" };
+
+      return {
+        success: false,
+        message: "System error",
+      };
     } finally {
       set({ loading: false });
     }
@@ -127,7 +166,7 @@ export const useCategoryStore = create((set, get) => ({
 
       const res = await CategoryService.deleteCategory(id);
 
-      if (res?.success) {
+      if (res?.status === "SUCCESS" || res?.success) {
         set((state) => ({
           categories: state.categories.filter((cat) => cat.id !== Number(id)),
         }));
@@ -136,7 +175,11 @@ export const useCategoryStore = create((set, get) => ({
       return res;
     } catch (err) {
       console.error(`Lỗi delete category ${id}:`, err);
-      return { success: false, message: "System error" };
+
+      return {
+        success: false,
+        message: "System error",
+      };
     } finally {
       set({ loading: false });
     }

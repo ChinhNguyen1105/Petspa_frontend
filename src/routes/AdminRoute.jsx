@@ -25,7 +25,7 @@ const AdminRoute = ({ children }) => {
   }
 
   // không có quyền admin
-  if (role !== "ADMIN" && role !== "STAFF") {
+  if (role !== "ROLE_ADMIN" && role !== "ROLE_STAFF") {
     return <Navigate to="/" replace />;
   }
 

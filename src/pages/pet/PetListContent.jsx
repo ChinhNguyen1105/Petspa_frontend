@@ -26,7 +26,7 @@ const PetListContent = ({ pets }) => {
       ) : (
         <div className="text-center py-10 bg-white rounded-3xl border border-dashed border-gray-200">
           <p className="text-gray-500 mb-4">Bạn chưa có thú cưng nào.</p>
-          <Link to="/pet/create">
+          <Link to="/profile/pets/create">
             <Button variant="outline">Thêm thú cưng ngay</Button>
           </Link>
         </div>

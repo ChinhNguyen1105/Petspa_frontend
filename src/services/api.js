@@ -1,37 +1,66 @@
-import axios from 'axios';
+import axios from "axios";
 
-// Khởi tạo cấu hình mặc định cho API
+// ─────────────────────────────────────────────
+// AXIOS INSTANCE
+// ─────────────────────────────────────────────
 const api = axios.create({
-  // Thay thế URL này bằng URL backend thực tế của bạn
-  baseURL: 'http://localhost:8080/api/v1', 
-  timeout: 10000, // Timeout sau 10 giây nếu server không phản hồi
+  baseURL: "http://localhost:8080/api/v1",
+  timeout: 10000,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 });
 
-// Interceptor: Thêm Token vào mỗi request (nếu người dùng đã đăng nhập)
+// ─────────────────────────────────────────────
+// REQUEST INTERCEPTOR
+// Tự động gắn JWT vào header
+// ─────────────────────────────────────────────
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token'); // Hoặc lấy từ authStore của bạn
+    const token =
+      localStorage.getItem("petspa_token");
+
+    console.log(
+      "JWT TOKEN:",
+      token
+    );
+
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      config.headers.Authorization =
+        `Bearer ${token}`;
     }
+
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// Interceptor: Xử lý lỗi tập trung (ví dụ: lỗi 401 khi token hết hạn)
+// ─────────────────────────────────────────────
+// RESPONSE INTERCEPTOR
+// Xử lý lỗi tập trung
+// ─────────────────────────────────────────────
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Xử lý đăng xuất hoặc chuyển hướng về trang login tại đây
-      console.error("Token hết hạn hoặc không hợp lệ");
-      localStorage.removeItem('token');
-      // window.location.href = '/auth/login';
+    if (
+      error.response?.status === 401
+    ) {
+      console.error(
+        "Token hết hạn hoặc không hợp lệ"
+      );
+
+      localStorage.removeItem(
+        "petspa_token"
+      );
+
+      localStorage.removeItem(
+        "petspa_user"
+      );
+
+      // Nếu muốn tự động về login
+      // window.location.href = "/login";
     }
+
     return Promise.reject(error);
   }
 );

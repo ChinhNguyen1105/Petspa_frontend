@@ -31,6 +31,7 @@ export const URL_CONSTANT = {
     CREATE_PRODUCT: '/products',
     UPDATE_PRODUCT: '/products',
     DELETE_PRODUCT: '/products/{id}',
+    GET_RECOMMENDATIONS: "/products/recommendations"
   },
 
   ProductImages: {
@@ -38,6 +39,7 @@ export const URL_CONSTANT = {
     ADD_IMAGES: '/product-images',
     DELETE_IMAGE: '/product-images/{id}',
     SET_MAIN_IMAGE: '/product-images/set-main-image',
+    GET_IMAGES: "/product-images/{productId}"
   },
 
   Inventory: {
@@ -107,6 +109,7 @@ export const URL_CONSTANT = {
     GET_SERVICES_BY_CATEGORY: '/services/category/{categoryId}',
     DELETE_SERVICE: '/services/{id}',
     GET_TOP_SERVICES: '/services/top',
+    GET_RECOMMENDATIONS: "services/recommendations"
   },
 
   ProductReview: {
@@ -145,6 +148,7 @@ export const URL_CONSTANT = {
     GET_ALL_BOOKINGS: '/bookings/all',
     CANCEL_BOOKING: '/bookings/{id}/cancel',
     UPDATE_BOOKING_STATUS: '/bookings/{id}/status',
+    GET_BOOKED_TIMES: "bookings/occupied-times"
   },
 
   Category: {
@@ -154,6 +158,19 @@ export const URL_CONSTANT = {
     CREATE_CATEGORY: '/categories',
     UPDATE_CATEGORY: '/categories',
     DELETE_CATEGORY: '/categories/{id}',
+  },
+
+  Menu: {
+    PREFIX: '/menus',
+    CREATE_MENU: '/menus',
+    UPDATE_MENU: '/menus/{id}',
+    GET_MENU: '/menus/{id}',
+    GET_ALL_MENUS: '/menus',
+    SEARCH_MENUS: '/menus/search',
+    GET_MENUS_BY_CATEGORY: '/menus/category/{categoryId}',
+    DELETE_MENU: '/menus/{id}',
+    GET_MENUS_TREE: '/menus/tree',
+    GET_ACTIVE_MENUS: '/menus/active',
   },
 
   Payment: {

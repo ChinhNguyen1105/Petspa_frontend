@@ -29,7 +29,9 @@ export const useReviewStore = create((set) => ({
       return response;
     } catch (error) {
       set({
-        error: error.message,
+        error:
+          error.response?.data?.message ||
+          error.message,
         loading: false,
       });
 
@@ -57,7 +59,9 @@ export const useReviewStore = create((set) => ({
       return response;
     } catch (error) {
       set({
-        error: error.message,
+        error:
+          error.response?.data?.message ||
+          error.message,
         loading: false,
       });
 
@@ -76,6 +80,7 @@ export const useReviewStore = create((set) => ({
 
       const response =
         await reviewService.getProductReviews(productId);
+
       set({
         reviews: response.data || [],
         loading: false,
@@ -84,7 +89,9 @@ export const useReviewStore = create((set) => ({
       return response;
     } catch (error) {
       set({
-        error: error.message,
+        error:
+          error.response?.data?.message ||
+          error.message,
         loading: false,
       });
 
@@ -98,13 +105,12 @@ export const useReviewStore = create((set) => ({
   |--------------------------------------------------------------------------
   */
   getServiceReviews: async (serviceId) => {
-     console.log("serviceId:", serviceId, typeof serviceId);
     try {
       set({ loading: true, error: null });
 
       const response =
         await reviewService.getServiceReviews(serviceId);
-      console.log("response data:", response.data);
+
       set({
         reviews: response.data || [],
         loading: false,
@@ -113,7 +119,9 @@ export const useReviewStore = create((set) => ({
       return response;
     } catch (error) {
       set({
-        error: error.message,
+        error:
+          error.response?.data?.message ||
+          error.message,
         loading: false,
       });
 
@@ -126,7 +134,10 @@ export const useReviewStore = create((set) => ({
   | Get Reviews By Item
   |--------------------------------------------------------------------------
   */
-  getReviewsByItem: async (targetType, targetId) => {
+  getReviewsByItem: async (
+    targetType,
+    targetId
+  ) => {
     try {
       set({ loading: true, error: null });
 
@@ -135,6 +146,7 @@ export const useReviewStore = create((set) => ({
           targetType,
           targetId
         );
+
       set({
         reviews: response.data || [],
         loading: false,
@@ -143,7 +155,9 @@ export const useReviewStore = create((set) => ({
       return response;
     } catch (error) {
       set({
-        error: error.message,
+        error:
+          error.response?.data?.message ||
+          error.message,
         loading: false,
       });
 
@@ -160,18 +174,56 @@ export const useReviewStore = create((set) => ({
     try {
       set({ loading: true, error: null });
 
-      const response =
-        await reviewService.createReview(reviewData);
+      const {
+        targetType,
+        targetId,
+        rating,
+        comment,
+      } = reviewData;
+
+      console.log(
+        "review payload:",
+        reviewData
+      );
+
+      let response;
+
+      if (targetType === "PRODUCT") {
+        response =
+          await reviewService.createProductReview({
+            productId: targetId,
+            rating,
+            comment,
+          });
+      } else if (
+        targetType === "SERVICE"
+      ) {
+        response =
+          await reviewService.createServiceReview({
+            serviceId: targetId,
+            rating,
+            comment,
+          });
+      } else {
+        throw new Error(
+          `Invalid targetType: ${targetType}`
+        );
+      }
 
       set((state) => ({
-        reviews: [response.data, ...state.reviews],
+        reviews: [
+          response.data,
+          ...state.reviews,
+        ],
         loading: false,
       }));
 
       return response;
     } catch (error) {
       set({
-        error: error.message,
+        error:
+          error.response?.data?.message ||
+          error.message,
         loading: false,
       });
 
@@ -184,7 +236,10 @@ export const useReviewStore = create((set) => ({
   | Update Review
   |--------------------------------------------------------------------------
   */
-  updateReview: async (reviewId, reviewData) => {
+  updateReview: async (
+    reviewId,
+    reviewData
+  ) => {
     try {
       set({ loading: true, error: null });
 
@@ -195,13 +250,14 @@ export const useReviewStore = create((set) => ({
         );
 
       set((state) => ({
-        reviews: state.reviews.map((review) =>
-          review.id === reviewId
-            ? {
-                ...review,
-                ...response.data,
-              }
-            : review
+        reviews: state.reviews.map(
+          (review) =>
+            review.id === reviewId
+              ? {
+                  ...review,
+                  ...response.data,
+                }
+              : review
         ),
         loading: false,
       }));
@@ -209,7 +265,9 @@ export const useReviewStore = create((set) => ({
       return response;
     } catch (error) {
       set({
-        error: error.message,
+        error:
+          error.response?.data?.message ||
+          error.message,
         loading: false,
       });
 
@@ -227,11 +285,14 @@ export const useReviewStore = create((set) => ({
       set({ loading: true, error: null });
 
       const response =
-        await reviewService.deleteReview(reviewId);
+        await reviewService.deleteReview(
+          reviewId
+        );
 
       set((state) => ({
         reviews: state.reviews.filter(
-          (review) => review.id !== reviewId
+          (review) =>
+            review.id !== reviewId
         ),
         loading: false,
       }));
@@ -239,7 +300,9 @@ export const useReviewStore = create((set) => ({
       return response;
     } catch (error) {
       set({
-        error: error.message,
+        error:
+          error.response?.data?.message ||
+          error.message,
         loading: false,
       });
 

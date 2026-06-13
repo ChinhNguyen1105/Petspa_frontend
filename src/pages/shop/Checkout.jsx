@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { MapPin, CreditCard, ShoppingBag, ArrowLeft, CheckCircle2, Plus, X } from 'lucide-react';
+import { MapPin, CreditCard, ShoppingBag, ArrowLeft, Plus, X } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/ui/Badge';
-import Modal  from '../../components/common/Modal'; 
 import AddressForm from '../../components/form/AddressForm'; 
 
 // TÍCH HỢP STORES
@@ -12,6 +11,9 @@ import { useOrderStore } from '../../store/orderStore';
 import { useAddressStore } from '../../store/addressStore';
 import { formatPrice } from '../../utils/formatPrice';
 import PaymentModal from '../../components/common/PaymentModal';
+
+// 🔥 TÍCH HỢP COMPONENT APRIORI RECOMMENDATION
+import RecommendedProducts from './RecommendProducts';
 
 const Checkout = () => {
   const navigate = useNavigate();
@@ -32,6 +34,9 @@ const Checkout = () => {
   const [showAddForm, setShowAddForm] = useState(false); 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [createdOrderData, setCreatedOrderData] = useState(null);
+  
+  // TRẠNG THÁI MỚI: Lưu trữ thông tin địa chỉ đang cần chỉnh sửa/xóa
+  const [editingAddress, setEditingAddress] = useState(null); 
 
   // Đồng bộ tải dữ liệu ban đầu
   useEffect(() => {
@@ -47,43 +52,63 @@ const Checkout = () => {
     }
   }, [addresses, selectedAddress]);
 
-  // 🔥 ĐỒNG BỘ: Tự động chọn địa chỉ mới và quay về màn hình danh sách trong Overlay
+  // ĐỒNG BỘ NÂNG CẤP: Xử lý sau khi Thêm mới / Sửa / Xóa thành công từ Form gửi về
   const handleAddressSubmitSuccess = (newAddress) => {
-    fetchAddresses(); // Tải lại danh sách từ store Mock để đồng bộ ngầm
-    if (newAddress) {
-      setSelectedAddress(newAddress); // Áp dụng ngay địa chỉ mới làm địa chỉ active ngoài trang Checkout
+    fetchAddresses(); // Tải lại danh sách từ store để cập nhật dữ liệu mới nhất
+    
+    if (newAddress && !editingAddress) {
+      // Trường hợp 1: Thêm mới thành công -> Áp dụng chọn ngay địa chỉ này
+      setSelectedAddress(newAddress); 
+    } else if (editingAddress) {
+      // Trường hợp 2: Chỉnh sửa thành công
+      if (selectedAddress?.id === editingAddress.id) {
+        // Nếu địa chỉ vừa sửa trùng với địa chỉ đang active ngoài màn hình -> Cập nhật hiển thị text bên ngoài luôn
+        setSelectedAddress(newAddress);
+      }
+    } else {
+      // Trường hợp 3: Xóa địa chỉ (Form không trả về newAddress)
+      if (selectedAddress?.id === editingAddress?.id) {
+        setSelectedAddress(null); // Xóa hiển thị active nếu trúng địa chỉ vừa bị xóa hành vi
+      }
     }
-    setShowAddForm(false); // Đóng form thêm mới -> Overlay tự động hiển thị lại danh sách địa chỉ
+    
+    // Reset toàn bộ trạng thái để quay về màn hình danh sách địa chỉ trong Overlay
+    setEditingAddress(null); 
+    setShowAddForm(false); 
   };
 
   // Xử lý hành động Đặt hàng chính
   const handlePlaceOrder = async () => {
     if (!selectedAddress) {
-      alert('Vui lòng chọn hoặc thêm địa chỉ nhận hàng!');
+      alert("Vui lòng chọn hoặc thêm địa chỉ nhận hàng!");
       return;
     }
 
     const orderPayload = {
+      cartItemIds: itemDtoList.map((item) => item.id),
       addressId: selectedAddress.id,
-      shippingName: selectedAddress.fullName,
-      shippingPhone: selectedAddress.phone,
-      shippingAddressFull: selectedAddress.fullAddress,
       paymentMethod: paymentMethod,
-      items: itemDtoList,
-      totalAmount: totalAmount
     };
 
+    console.log("ORDER PAYLOAD:", orderPayload);
+
     const res = await createOrder(orderPayload);
-    if (res?.success) {
-      if (paymentMethod === 'BANKING') {
-        setCreatedOrderData(res.data);
+
+    // FIX QUAN TRỌNG Ở ĐÂY
+    const orderData = res?.data || res;
+
+    if (res?.success || orderData) {
+      if (paymentMethod === "BANKING") {
+        setCreatedOrderData(orderData);
         setShowPaymentModal(true);
       } else {
         clearCart();
-        navigate('/order-success', { state: { order: res.data } });
+        navigate("/order-success", {
+          state: { order: orderData },
+        });
       }
     } else {
-      alert(res?.message || 'Đã có lỗi xảy ra khi tạo đơn hàng.');
+      alert(res?.message || "Đã có lỗi xảy ra khi tạo đơn hàng.");
     }
   };
 
@@ -99,6 +124,7 @@ const Checkout = () => {
 
       <h1 className="text-3xl font-bold mb-8 text-gray-800">Tiến hành thanh toán</h1>
 
+      {/* Grid thông tin thanh toán cơ bản */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* CỘT TRÁI & GIỮA: THÔNG TIN GIAO HÀNG VÀ THANH TOÁN */}
@@ -125,14 +151,16 @@ const Checkout = () => {
             ) : selectedAddress ? (
               <div className="p-4 bg-slate-50 rounded-xl border border-dashed border-gray-200">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="font-semibold text-gray-700">{selectedAddress.fullName}</span>
+                  <span className="font-semibold text-gray-700">{selectedAddress.fullName || selectedAddress.recipient_name}</span>
                   <span className="text-gray-400">|</span>
-                  <span className="text-gray-600">{selectedAddress.phone}</span>
+                  <span className="text-gray-600">{selectedAddress.phone || selectedAddress.phone_number}</span>
                   {selectedAddress.isDefault && (
                     <Badge variant="success" className="text-xs ml-2">Mặc định</Badge>
                   )}
                 </div>
-                <p className="text-gray-600 text-sm mt-1">{selectedAddress.fullAddress}</p>
+                <p className="text-gray-600 text-sm mt-1">
+                  {selectedAddress.fullAddress || `${selectedAddress.detail_address}, ${selectedAddress.district_ward}, ${selectedAddress.province_city}`}
+                </p>
               </div>
             ) : (
               <div className="text-center py-6 bg-slate-50 rounded-xl border border-dashed border-gray-200">
@@ -163,7 +191,7 @@ const Checkout = () => {
                 />
                 <div className="ml-4">
                   <p className="font-medium text-gray-800">Thanh toán khi nhận hàng (COD)</p>
-                  <p className="text-xs text-gray-500">Thanh toán bằng tiền mặt trực tiếp cho shipper khi nhận được thú cưng/hàng hóa</p>
+                  <p className="text-xs text-gray-500">Thanh toán bằng tiền mặt trực tiếp cho shipper khi nhận được hàng hóa</p>
                 </div>
               </label>
 
@@ -237,13 +265,23 @@ const Checkout = () => {
 
       </div>
 
-      {/* --- OVERLAY / MODAL CHỌN ĐỊA CHỈ & FORM THÊM MỚI --- */}
+      {/* 🔥 VỊ TRÍ GẮN COMPONENT RECOMMENDATION APRIORI TRỰC QUAN */}
+      {/* Hiển thị full-width ngay phía dưới Grid thanh toán để kích thích upsell */}
+      <div className="mt-12">
+        <RecommendedProducts maxItems={4} />
+      </div>
+
+      {/* --- OVERLAY / MODAL CHỌN ĐỊA CHỈ & FORM THÊM MỚI / SỬA --- */}
       {showAddressOverlay && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs">
           <div className="no-scrollbar bg-white rounded-2xl w-full max-w-xl p-6 shadow-xl relative max-h-[85vh] overflow-y-auto m-4 animate-in fade-in zoom-in-95 duration-200">
             
             <button 
-              onClick={() => { setShowAddressOverlay(false); setShowAddForm(false); }}
+              onClick={() => { 
+                setShowAddressOverlay(false); 
+                setShowAddForm(false); 
+                setEditingAddress(null);
+              }}
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors"
             >
               <X className="w-5 h-5" />
@@ -257,19 +295,39 @@ const Checkout = () => {
                   {addresses.map((addr) => (
                     <div 
                       key={addr.id} 
-                      onClick={() => {
-                        setSelectedAddress(addr);
-                        setShowAddressOverlay(false);
-                      }}
-                      className={`p-4 rounded-xl border text-left cursor-pointer transition-all ${selectedAddress?.id === addr.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-gray-200 hover:bg-gray-50'}`}
+                      className={`p-4 rounded-xl border text-left relative flex justify-between items-center transition-all ${selectedAddress?.id === addr.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-gray-200 hover:bg-gray-50'}`}
                     >
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-gray-800">{addr.fullName}</span>
-                        <span className="text-gray-400">|</span>
-                        <span className="text-gray-600 text-sm">{addr.phone}</span>
-                        {addr.isDefault && <Badge variant="success" className="text-xs">Mặc định</Badge>}
+                      {/* VÙNG CLICK 1: Chọn địa chỉ làm active */}
+                      <div 
+                        className="cursor-pointer flex-1 pr-12"
+                        onClick={() => {
+                          setSelectedAddress(addr);
+                          setShowAddressOverlay(false);
+                        }}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold text-gray-800">{addr.fullName || addr.recipient_name}</span>
+                          <span className="text-gray-400">|</span>
+                          <span className="text-gray-600 text-sm">{addr.phone || addr.phone_number}</span>
+                          {addr.isDefault && <Badge variant="success" className="text-xs">Mặc định</Badge>}
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          {addr.fullAddress || `${addr.detail_address}, ${addr.district_ward}, ${addr.province_city}`}
+                        </p>
                       </div>
-                      <p className="text-xs text-gray-500">{addr.fullAddress}</p>
+
+                      {/* VÙNG CLICK 2: Nút sửa nằm biệt lập */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation(); // Ngăn hành động click lan sang vùng chọn địa chỉ
+                          setEditingAddress(addr); // Lưu data địa chỉ đích để sửa
+                          setShowAddForm(true); // Mở form
+                        }}
+                        className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors flex-shrink-0"
+                      >
+                        Sửa
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -277,20 +335,32 @@ const Checkout = () => {
                 <Button 
                   variant="outline" 
                   className="w-full border-dashed flex items-center justify-center gap-2 py-2.5"
-                  onClick={() => setShowAddForm(true)}
+                  onClick={() => {
+                    setEditingAddress(null); // Đảm bảo trạng thái sửa bằng null để kích hoạt form Thêm mới
+                    setShowAddForm(true);
+                  }}
                 >
                   <Plus className="w-4 h-4" /> Thêm địa chỉ nhận hàng mới
                 </Button>
               </>
             ) : (
               <>
-                <h3 className="text-lg font-bold text-gray-800 mb-2">Thêm địa chỉ giao hàng mới</h3>
-                <p className="text-xs text-gray-400 mb-4">Vui lòng điền thông tin biểu mẫu chính xác bên dưới để giao hàng thuận tiện hơn.</p>
+                {/* TIÊU ĐỀ THAY ĐỔI LINH HOẠT THEO HÀNH ĐỘNG */}
+                <h3 className="text-lg font-bold text-gray-800 mb-2">
+                  {editingAddress ? "Chỉnh sửa địa chỉ giao hàng" : "Thêm địa chỉ giao hàng mới"}
+                </h3>
+                <p className="text-xs text-gray-400 mb-4">
+                  Vui lòng điền thông tin biểu mẫu chính xác bên dưới để giao hàng thuận tiện hơn.
+                </p>
                 
                 <div className="border border-gray-100 p-4 rounded-xl bg-slate-50">
                   <AddressForm 
+                    initialData={editingAddress} // Đẩy data của địa chỉ đang sửa vào prop này
                     onSuccess={handleAddressSubmitSuccess}
-                    onCancel={() => setShowAddForm(false)} 
+                    onCancel={() => { 
+                      setShowAddForm(false); 
+                      setEditingAddress(null); // Hủy sửa thì xóa trạng thái lưu tạm
+                    }} 
                   />
                 </div>
               </>

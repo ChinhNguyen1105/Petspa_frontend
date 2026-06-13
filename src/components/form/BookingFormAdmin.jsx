@@ -8,17 +8,30 @@ import {
   Notebook,
   CheckCircle2
 } from 'lucide-react';
-import BookingService from '../../services/bookingService';
+
 import validateBookingForm from '../../utils/bookingValidator';
 
+import { useBookingStore } from '../../store/bookingStore';
 import { useServiceStore } from '../../store/serviceStore';
 import { useUserStore }    from '../../store/userStore';
-import { usePetStore }     from '../../store/petStore';
+import { usePetStore } from '../../store/petStore';
+import { SLOT_TIMES } from '../../constants';
+
+// Chuyển "HH:mm:ss" hoặc "HH:mm" về số phút trong ngày để so sánh
+const toMinutes = (timeStr) => {
+  if (!timeStr) return null;
+  const [h, m] = timeStr.split(':').map(Number);
+  return h * 60 + m;
+};
+
+// Kiểm tra 2 khoảng [aStart, aEnd) và [bStart, bEnd) có overlap không
+const isOverlap = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && bStart < aEnd;
 
 const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
   // ─── STORE DATA ──────────────────────────────────────────────────────────────
   const { services, fetchServices }      = useServiceStore();
   const { users, fetchUsers }            = useUserStore();
+  const { fetchUnavailableSlots }        = useBookingStore();
   const {
     pets,
     fetchPetsByUser,
@@ -43,13 +56,14 @@ const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
   });
 
   // ─── MATCHED USER (tra theo userId nhập tay) ───────────────────────────────
- const matchedUser = useMemo(() => {
-  const userId = formData.userId?.trim();
+  const matchedUser = useMemo(() => {
+    const userId = formData.userId?.toString().trim();
+    if (!userId) return undefined;
 
-  return users.find(
-    (u) => u.id?.trim() === userId
-  );
-}, [users, formData.userId]);
+    return users.find(
+      (u) => String(u.id).trim() === userId
+    );
+  }, [users, formData.userId]);
 
   // ─── TÍNH TOÁN GIÁ TRỊ PHÁT SINH ────────────────────────────────────────────
   const selectedServices = useMemo(
@@ -68,6 +82,7 @@ const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
   );
 
   const slotsNeeded = Math.ceil(totalDuration / 30);
+
   // ─── FETCH METADATA BAN ĐẦU TỪ STORES ──────────────────────────────────────
   useEffect(() => {
     const init = async () => {
@@ -92,31 +107,23 @@ const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
   }, [formData.userId, matchedUser]);
 
   // ─── TỰ ĐỘNG LỌC PET THEO USER ID ───────────────────────────────────────────
-useEffect(() => {
-  if (!matchedUser) return;
- console.log("matchedUser.id =", matchedUser.id);
-  if (
-    !initialData ||
-    formData.userId.toString() !==
-      initialData?.user?.id?.toString()
-  ) {
-    setFormData((prev) => ({
-      ...prev,
-      petId: "",
-    }));
-  }
-  console.log("Fetching pets for:", matchedUser.id);
-  fetchPetsByUser(matchedUser.id);
-}, [matchedUser, initialData, fetchPetsByUser]);
-  
-console.log("formData.userId =", formData.userId);
-console.log("users[0] =", users[0]);
   useEffect(() => {
-  console.log("matchedUser:", matchedUser);
-  console.log("pets:", pets);
-  }, [matchedUser, pets]);
-  
-  // ─── FETCH SLOTS THEO NGÀY ───────────────────────────────────────────────────
+    if (!matchedUser) return;
+
+    if (
+      !initialData ||
+      formData.userId.toString() !== initialData?.user?.id?.toString()
+    ) {
+      setFormData((prev) => ({
+        ...prev,
+        petId: "",
+      }));
+    }
+
+    fetchPetsByUser(matchedUser.id);
+  }, [matchedUser, initialData, fetchPetsByUser]);
+
+  // ─── FETCH SLOTS THEO NGÀY (dựa trên SLOT_TIMES + unavailableSlots) ─────────
   useEffect(() => {
     if (!formData.date) {
       setSlots([]);
@@ -124,11 +131,33 @@ console.log("users[0] =", users[0]);
     }
 
     let isCancelled = false;
-    const fetchSlots = async () => {
+    const loadSlots = async () => {
       setLoadingSlots(true);
       try {
-        const res = await BookingService.getAvailableSlots(formData.date);
-        if (!isCancelled) setSlots(res?.success ? res.data || [] : []);
+        const res = await fetchUnavailableSlots({ bookingDate: formData.date });
+        if (isCancelled) return;
+
+        const unavailable = res?.data || [];
+
+        const computedSlots = SLOT_TIMES.map((slotTime) => {
+          const slotStart = toMinutes(slotTime.startTime);
+          const slotEnd   = toMinutes(slotTime.endTime);
+
+          const isBooked = unavailable.some((u) => {
+            const uStart = toMinutes(u.startTime);
+            const uEnd   = toMinutes(u.endTime);
+            return isOverlap(slotStart, slotEnd, uStart, uEnd);
+          });
+
+          return {
+            startTime: slotTime.startTime,
+            endTime:   slotTime.endTime,
+            available: !isBooked,
+            reason:    isBooked ? 'BOOKED' : null,
+          };
+        });
+
+        setSlots(computedSlots);
       } catch (err) {
         if (!isCancelled) {
           console.error('Lỗi lấy danh sách khung giờ trống:', err);
@@ -139,9 +168,9 @@ console.log("users[0] =", users[0]);
       }
     };
 
-    fetchSlots();
+    loadSlots();
     return () => { isCancelled = true; };
-  }, [formData.date]);
+  }, [formData.date, fetchUnavailableSlots]);
 
   // ─── THUẬT TOÁN KIỂM TRA N SLOT LIÊN TIẾP ───────────────────────────────────
   const checkConsecutiveSlots = useCallback((startIndex) => {
@@ -220,7 +249,7 @@ console.log("users[0] =", users[0]);
       serviceIds: formData.serviceIds,
       date:       formData.date,
       time:       formData.time,
-      userId:     formData.userId,
+      customerId: formData.userId,
       petId:      formData.petId,
     };
 
@@ -235,26 +264,16 @@ console.log("users[0] =", users[0]);
 
     setFormErrors({});
 
-    const targetPet = pets.find(p => p.id.toString() === formData.petId.toString());
-
+    // Payload khớp ReqCreateBooking: userId, serviceIds, bookingDate, startTime, endTime, petId (optional)
+    // note được giữ lại (không có trong DTO hiện tại nhưng không thay đổi backend theo yêu cầu)
     onSubmit({
-      user: {
-        id:   matchedUser?.id,
-        name: matchedUser?.name || '',
-      },
-      pet: {
-        id:      formData.petId,
-        name:    targetPet?.name    || 'Chưa rõ',
-        specie:  targetPet?.specie  || 'N/A',
-      },
-      services:     selectedServices.map(s => ({ id: s.id, name: s.name })),
-      bookingDate:  formData.date,
-      startTime:    formData.time,
-      endTime:      slots[selectedStartIndex + slotsNeeded - 1]?.endTime || formData.time,
-      durationMin:  totalDuration,
-      totalAmount:  totalAmount,
-      note:         formData.note,
-      status:       initialData?.status || 'PENDING',
+      userId:      matchedUser?.id,
+      serviceIds:  formData.serviceIds.map(id => Number(id)),
+      bookingDate: formData.date,
+      startTime:   formData.time,
+      endTime:     slots[selectedStartIndex + slotsNeeded - 1]?.endTime || formData.time,
+      petId:       formData.petId ? Number(formData.petId) : null,
+      note:        formData.note,
     });
   };
 

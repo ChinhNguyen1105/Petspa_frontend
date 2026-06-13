@@ -30,7 +30,7 @@ const ProductList = () => {
     loading: categoryLoading,
     fetchCategories
   } = useCategoryStore();
-  console.log("categories: ", categories);
+
   // Xác định kích thước trang (Ưu tiên meta từ backend, không thì dùng cấu hình store, mặc định là 12)
   const currentSize = meta?.size || pageSize || 12;
 
@@ -38,7 +38,6 @@ const ProductList = () => {
   useEffect(() => {
     fetchCategories({ type: 'PRODUCT' });
   }, [fetchCategories]);
-
   // TRIGGER EFFECT: Đồng bộ gọi API fetch dữ liệu tập trung qua 1 Effect duy nhất
   // Tích hợp Debounce (300ms) để tối ưu hiệu năng và truyền đúng cấu trúc tham số backend cần
   useEffect(() => {

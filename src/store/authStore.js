@@ -44,11 +44,10 @@ export const useAuthStore = create((set, get) => ({
 
     try {
       const res = await AuthService.login(credentials);
-      
+      console.log("LOGIN RESPONSE", res);
       // Bóc tách dữ liệu theo cấu trúc mới: res.data.resLoginDTO
-      const resLoginDTO = res?.data?.resLoginDTO;
-      const user = resLoginDTO?.user;
-      const accessToken = resLoginDTO?.accessToken;
+      const user = res?.data?.user;
+      const accessToken = res?.data?.accessToken;
 
       if (!user || !accessToken) {
         throw new Error("Không nhận được thông tin xác thực từ hệ thống.");
@@ -73,9 +72,7 @@ export const useAuthStore = create((set, get) => ({
       };
     } catch (err) {
       const msg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Đăng nhập thất bại";
+        err?.response?.data?.message || err?.message || "Đăng nhập thất bại";
 
       set({ loading: false, error: msg });
 
@@ -121,9 +118,7 @@ export const useAuthStore = create((set, get) => ({
       };
     } catch (err) {
       const msg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Đăng ký thất bại";
+        err?.response?.data?.message || err?.message || "Đăng ký thất bại";
 
       set({ loading: false, error: msg });
 

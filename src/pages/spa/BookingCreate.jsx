@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams, useParams } from "react-router-dom";
-import { CalendarClock, CheckCircle, AlertCircle } from "lucide-react";
+import { CalendarClock, CheckCircle, AlertCircle, Sparkles, ShoppingBag, Loader2 } from "lucide-react";
 
 import Modal from "../../components/common/Modal";
 import { Button } from "../../components/common/Button";
 import PaymentModal from "../../components/common/PaymentModal";
 import BookingForm from "../../components/form/BookingForm";
+import ServiceCard from "../../components/ui/ServiceCard"; // 🌟 Import ServiceCard phục vụ khối gợi ý
 
 import { useAuthStore } from "../../store/authStore";
 import { useServiceStore } from "../../store/serviceStore";
 import { usePetStore } from "../../store/petStore";
 import { useBookingStore } from "../../store/bookingStore";
-
+import useRecommendationStore from "../../store/apioriStore"; // 🌟 Import Apriori Store
 import { SLOT_TIMES } from "../../constants";
 
 const BookingCreate = () => {
@@ -27,25 +28,35 @@ const BookingCreate = () => {
 
   // ─── STORES ───
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const user = useAuthStore((state) => state.user);
   const { services, fetchServices, loading: loadingServices } = useServiceStore();
   const { pets, fetchPets, loading: loadingPets } = usePetStore();
-  
-  const { 
-    submitting, 
+
+  const {
+    bookings,
+    fetchBookings, // Lấy lịch sử booking để làm dữ liệu đầu vào cho hệ thuật toán
+    submitting,
     createBooking,
-    bookedSlots, // Danh sách các slot đã bị đặt
+    bookedSlots, 
     loadingSlots,
-    fetchUnavailableSlots
+    fetchUnavailableSlots,
   } = useBookingStore();
 
-  // Local unified slots format for UI: { start_time, end_time, available, reason }
-  const [slots, setSlots] = useState([]);
+  // 🌟 STORES APRIORI RECOMMENDATION
+  const {
+    productRecommendations: serviceRecommendations,
+    fetchProductRecommendations: fetchServiceRecommendations,
+    loading: recLoading,
+    error: recError,
+  } = useRecommendationStore();
 
   // ─── LOCAL STATE ───
+  const [slots, setSlots] = useState([]);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [createdBookingData, setCreatedBookingData] = useState(null);
   const [errors, setErrors] = useState({});
+  const [recommendedList, setRecommendedList] = useState([]); // Lưu danh sách dịch vụ gợi ý đã map thành công
 
   const [formData, setFormData] = useState({
     serviceIds: initialServiceId ? [initialServiceId] : [],
@@ -56,155 +67,202 @@ const BookingCreate = () => {
   });
 
   // ─── DERIVED STATES ───
+  const servicesReady = services?.length > 0;
+  const bookingsReady = bookings?.length > 0;
+
   const selectedServices = services.filter((s) =>
     formData.serviceIds.includes(s.id.toString())
   );
-  
-  const totalDuration = selectedServices.reduce((sum, s) => sum + (s.durationMin || 0), 0) || 30;
-  const totalAmount = selectedServices.reduce((sum, s) => sum + (s.basePrice || 0), 0);
+
+  const totalDuration =
+    selectedServices.reduce((sum, s) => sum + (s.durationMin || 0), 0) || 30;
+  const totalAmount = selectedServices.reduce(
+    (sum, s) => sum + (s.basePrice || 0),
+    0
+  );
   const slotsNeeded = Math.ceil(totalDuration / 30);
 
-  // ─── HELPER FUNCTIONS ───
-  
-// ─── EFFECTS ───
+  // ─── HELPER: tính endTime dựa trên startTime + totalDuration ───
+  const computeEndTime = useCallback(
+    (startTime) => {
+      if (!startTime) return undefined;
 
-// Khởi tạo dữ liệu ban đầu
-useEffect(() => {
-  fetchServices();
-  fetchPets({
-    keyword: "",
-    speciesId: null,
-    gender: null,
-    ownerId: null,
-  });
-}, [fetchServices, fetchPets]);
+      const [h, m] = startTime.split(":").map(Number);
+      const startMinutes = h * 60 + m;
+      const endMinutes = startMinutes + totalDuration;
 
-// Khi chưa chọn ngày → hiển thị toàn bộ slot
-useEffect(() => {
-  if (!formData.date) {
-    setSlots(
-      SLOT_TIMES.map((slot) => ({
+      const endH = Math.floor(endMinutes / 60) % 24;
+      const endM = endMinutes % 60;
+
+      return `${String(endH).padStart(2, "0")}:${String(endM).padStart(
+        2,
+        "0"
+      )}`;
+    },
+    [totalDuration]
+  );
+
+  // ─── EFFECTS ĐỒNG BỘ DỮ LIỆU BAN ĐẦU ───
+  useEffect(() => {
+    fetchServices();
+    fetchPets({
+      keyword: "",
+      speciesId: null,
+      gender: null,
+      ownerId: null,
+    });
+    // Lấy lịch sử các giao dịch đặt lịch trước đó của hệ thống / tài khoản
+    if (!bookings?.length && typeof fetchBookings === "function") {
+      fetchBookings({ page: 1, pageSize: 10 });
+    }
+  }, [fetchServices, fetchPets, bookings, fetchBookings]);
+
+  // 🌟 APRIORI FLOW: BÓC TÁCH ID DỊCH VỤ CŨ & CALL API RECOMMENDATION
+  useEffect(() => {
+    if (!bookingsReady) return;
+
+    const serviceIds = Array.from(
+      new Set(
+        bookings
+          .flatMap(booking => {
+            const items = booking.bookingDetails || booking.services || booking.items || [];
+            return items.map(item => item.serviceId || item.service?.id || item.id);
+          })
+          .filter(Boolean)
+    ));
+
+    if (serviceIds.length > 0) {
+      fetchServiceRecommendations(serviceIds).catch(err =>
+        console.error("[APRIORI SPA ERROR]:", err)
+      );
+    }
+  }, [bookingsReady, fetchServiceRecommendations]);
+
+  // 🌟 APRIORI FLOW: MAPPING ID RECOMMENDATION THÀNH OBJECT DỊCH VỤ CHI TIẾT
+  useEffect(() => {
+    if (!serviceRecommendations?.length || !servicesReady) return;
+
+    const mapped = serviceRecommendations
+      .map(id => services.find(s => String(s.id) === String(id)))
+      .filter(Boolean)
+      .slice(0, 4); // Giới hạn tối đa hiển thị 4 dịch vụ mua kèm phù hợp
+
+    setRecommendedList(mapped);
+  }, [serviceRecommendations, servicesReady]);
+
+  // Khi chưa chọn ngày → hiển thị toàn bộ slot
+  useEffect(() => {
+    if (!formData.date) {
+      setSlots(
+        SLOT_TIMES.map((slot) => ({
+          start_time: slot.startTime,
+          end_time: slot.endTime,
+          available: true,
+          reason: null,
+        }))
+      );
+      return;
+    }
+
+    setFormData((prev) => (prev.time ? { ...prev, time: "" } : prev));
+
+    fetchUnavailableSlots({
+      date: formData.date,
+    });
+  }, [formData.date, fetchUnavailableSlots]);
+
+  // Reset giờ khi thay đổi dịch vụ (duration thay đổi)
+  useEffect(() => {
+    setFormData((prev) => (prev.time ? { ...prev, time: "" } : prev));
+  }, [slotsNeeded]);
+
+  // Đồng bộ SLOT_TIMES với bookedSlots từ backend
+  useEffect(() => {
+    const bookedTimes = new Set(
+      (bookedSlots || []).map((slot) => slot.startTime).filter(Boolean)
+    );
+
+    const mappedSlots = SLOT_TIMES.map((slot) => {
+      const isBooked = bookedTimes.has(slot.startTime);
+
+      return {
         start_time: slot.startTime,
         end_time: slot.endTime,
-        available: true,
-        reason: null,
-      }))
-    );
-    return;
-  }
-
-  // Reset giờ đã chọn khi đổi ngày
-  setFormData((prev) =>
-    prev.time ? { ...prev, time: "" } : prev
-  );
-
-  // Lấy danh sách slot đã được đặt trong ngày
-  fetchUnavailableSlots({
-    date: formData.date,
-  });
-}, [formData.date, fetchUnavailableSlots]);
-
-// Reset giờ khi thay đổi dịch vụ (duration thay đổi)
-useEffect(() => {
-  setFormData((prev) =>
-    prev.time ? { ...prev, time: "" } : prev
-  );
-}, [slotsNeeded]);
-
-// Đồng bộ SLOT_TIMES với bookedSlots từ backend
-useEffect(() => {
-  const bookedTimes = new Set(
-    (bookedSlots || [])
-      .map((slot) => slot.startTime)
-      .filter(Boolean)
-  );
-
-  const mappedSlots = SLOT_TIMES.map((slot) => {
-    const isBooked = bookedTimes.has(slot.startTime);
-
-    return {
-      start_time: slot.startTime,
-      end_time: slot.endTime,
-      available: !isBooked,
-      reason: isBooked ? "BOOKED" : null,
-    };
-  });
-
-  setSlots(mappedSlots);
-}, [bookedSlots]);
-
-// ─── SLOT VALIDATION ───
-
-const checkConsecutiveSlots = useCallback(
-  (startIndex) => {
-    if (
-      startIndex < 0 ||
-      startIndex + slotsNeeded > slots.length
-    ) {
-      return {
-        available: false,
-        reason: "OVER_WORKING_HOURS",
+        available: !isBooked,
+        reason: isBooked ? "BOOKED" : null,
       };
-    }
+    });
 
-    for (let i = 0; i < slotsNeeded; i++) {
-      const slot = slots[startIndex + i];
+    setSlots(mappedSlots);
+  }, [bookedSlots]);
 
-      if (!slot?.available) {
+  // ─── SLOT VALIDATION ───
+  const checkConsecutiveSlots = useCallback(
+    (startIndex) => {
+      if (startIndex < 0 || startIndex + slotsNeeded > slots.length) {
         return {
           available: false,
-          reason:
-            i === 0
-              ? slot.reason || "BOOKED"
-              : "INSUFFICIENT_CONSECUTIVE_SLOTS",
+          reason: "OVER_WORKING_HOURS",
         };
       }
-    }
 
-    return { available: true };
-  },
-  [slots, slotsNeeded]
-);
+      for (let i = 0; i < slotsNeeded; i++) {
+        const slot = slots[startIndex + i];
 
-// Chọn slot thủ công
-const handleSelectSlot = (slot, index) => {
-  const result = checkConsecutiveSlots(index);
+        if (!slot?.available) {
+          return {
+            available: false,
+            reason:
+              i === 0
+                ? slot.reason || "BOOKED"
+                : "INSUFFICIENT_CONSECUTIVE_SLOTS",
+          };
+        }
+      }
 
-  if (result.available) {
-    setFormData((prev) => ({
-      ...prev,
-      time: slot.start_time,
-    }));
-  }
-};
+      return { available: true };
+    },
+    [slots, slotsNeeded]
+  );
 
-// Tự động chọn slot đầu tiên khả dụng
-useEffect(() => {
-  if (!formData.date) return;
-  if (!formData.serviceIds.length) return;
-  if (formData.time) return;
-  if (!slots.length) return;
-
-  for (let i = 0; i < slots.length; i++) {
-    const result = checkConsecutiveSlots(i);
+  // Chọn slot thủ công
+  const handleSelectSlot = (slot, index) => {
+    const result = checkConsecutiveSlots(index);
 
     if (result.available) {
       setFormData((prev) => ({
         ...prev,
-        time: slots[i].start_time,
+        time: slot.start_time,
       }));
-      break;
     }
-  }
-}, [
-  slots,
-  slotsNeeded,
-  formData.date,
-  formData.serviceIds,
-  formData.time,
-  checkConsecutiveSlots,
-]);
+  };
 
+  // Tự động chọn slot đầu tiên khả dụng
+  useEffect(() => {
+    if (!formData.date) return;
+    if (!formData.serviceIds.length) return;
+    if (formData.time) return;
+    if (!slots.length) return;
+
+    for (let i = 0; i < slots.length; i++) {
+      const result = checkConsecutiveSlots(i);
+
+      if (result.available) {
+        setFormData((prev) => ({
+          ...prev,
+          time: slots[i].start_time,
+        }));
+        break;
+      }
+    }
+  }, [
+    slots,
+    slotsNeeded,
+    formData.date,
+    formData.serviceIds,
+    formData.time,
+    checkConsecutiveSlots,
+  ]);
 
   const handleServiceToggle = (id) => {
     setFormData((prev) => {
@@ -216,20 +274,50 @@ useEffect(() => {
       return { ...prev, serviceIds: newServiceIds, time: "" };
     });
   };
-  
+
+  // Tương tác trực tiếp khi người dùng click "Đặt lịch" tại Khối Gợi ý mua kèm
+  const handleSelectRecommendedService = (id) => {
+    handleServiceToggle(id);
+    // Cuộn mượt mà lên khu vực chính biểu mẫu để người dùng thấy dịch vụ đã được tick chọn
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleSubmit = async (e) => {
     e?.preventDefault?.();
     setErrors({});
 
+    if (!formData.serviceIds.length) {
+      setErrors({ submit: "Vui lòng chọn ít nhất một dịch vụ." });
+      return;
+    }
+    if (!formData.petId) {
+      setErrors({ submit: "Vui lòng chọn thú cưng." });
+      return;
+    }
+    if (!formData.date) {
+      setErrors({ submit: "Vui lòng chọn ngày." });
+      return;
+    }
+    if (!formData.time) {
+      setErrors({ submit: "Vui lòng chọn giờ." });
+      return;
+    }
+
     try {
       const payload = {
-        ...formData,
+        userId: user?.id,
+        serviceIds: formData.serviceIds.map((id) => Number(id)),
+        petId: Number(formData.petId),
+        bookingDate: formData.date,
+        startTime: formData.time,
+        endTime: computeEndTime(formData.time),
+        note: formData.note,
         durationMinutes: totalDuration,
       };
 
       const response = await createBooking(payload);
 
-      if (response?.success) {
+      if (response?.success !== false && response?.data) {
         setCreatedBookingData({ id: response.data?.id, amount: totalAmount });
         setIsPaymentModalOpen(true);
       } else {
@@ -242,10 +330,13 @@ useEffect(() => {
     }
   };
 
+  // 🌟 Kiểm tra trạng thái đang tính toán gợi ý của Apriori
+  const isRecLoading = recLoading && recommendedList.length === 0;
+
   return (
     <div className="min-h-screen bg-gray-50 pt-10 pb-20">
       <div className="container mx-auto px-4 max-w-2xl">
-        <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
+        <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm mb-8">
           <h1 className="text-2xl font-black text-pet-blue mb-6 flex items-center gap-2">
             <CalendarClock size={28} /> Đặt lịch Spa
           </h1>
@@ -277,6 +368,53 @@ useEffect(() => {
             loading={loadingServices || loadingPets}
           />
         </div>
+
+        {/* 🌟 KHỐI TÍCH HỢP HỆ THỐNG GỢI Ý ĐẶT KÈM (APRIORI SYSTEM) */}
+        {isRecLoading ? (
+          <div className="flex flex-col items-center justify-center py-10 text-gray-400 gap-2 bg-white rounded-3xl border border-gray-100">
+            <Loader2 className="animate-spin text-pet-blue" size={28} />
+            <p className="text-xs font-medium">Đang tìm các dịch vụ phù hợp đi kèm...</p>
+          </div>
+        ) : recommendedList.length > 0 ? (
+          <div className="bg-gradient-to-b from-blue-50/40 to-transparent p-6 rounded-3xl border border-blue-50/60 shadow-sm">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2 text-left">
+                <div className="p-2 bg-amber-100 text-amber-600 rounded-xl animate-pulse">
+                  <Sparkles size={18} fill="currentColor" />
+                </div>
+                <div>
+                  <h2 className="text-base font-black text-gray-800 uppercase tracking-tight">
+                    Dịch vụ thường được đặt kèm
+                  </h2>
+                  <p className="text-[11px] text-gray-400 font-medium">
+                    Gợi ý thông minh dựa trên thói quen chăm sóc của bạn
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 text-[10px] font-bold text-pet-blue bg-blue-50 px-2.5 py-1.5 rounded-full">
+                <ShoppingBag size={12} />
+                <span>Apriori AI</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {recommendedList.map((service) => (
+                <div key={service.id} className="relative group scale-95 hover:scale-100 transition-transform duration-300">
+                  <div className="absolute -top-1.5 -left-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-[9px] font-black px-2 py-0.5 rounded shadow-sm z-10 uppercase tracking-wider">
+                    Gợi ý đặt kèm ✨
+                  </div>
+                  {/* Truyền callback handleSelectRecommendedService vào prop onBookingClick của ServiceCard */}
+                  <ServiceCard 
+                    service={service} 
+                    onBookingClick={() => handleSelectRecommendedService(service.id)} 
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : !recError && (
+          console.log("[FINAL UI] Không tìm thấy dịch vụ gợi ý tương thích từ Apriori.")
+        )}
       </div>
 
       {/* Success Modal */}

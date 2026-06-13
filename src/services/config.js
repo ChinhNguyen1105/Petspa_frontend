@@ -1,3 +1,3 @@
 export const APP_CONFIG = {
-  USE_REAL_API: false,
+  USE_REAL_API: true,
 };

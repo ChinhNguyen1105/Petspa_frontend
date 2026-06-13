@@ -1,17 +1,11 @@
 import api from "./api";
 import { APP_CONFIG } from "./config";
 import { URL_CONSTANT } from "../constants/urlConstant";
-
 import { cartMock } from "../assets/data/mocks/cart/cartMock";
 
 const delay = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-/*
-|--------------------------------------------------------------------------
-| CONFIG
-|--------------------------------------------------------------------------
-*/
 let useApi = APP_CONFIG.USE_REAL_API;
 
 const setApi = (flag) => {
@@ -40,8 +34,7 @@ const getCart = async (options = {}) => {
   await delay(400);
 
   return {
-    success: true,
-    message: "Get cart successfully",
+    status: "SUCCESS",
     data: cartMock.data,
   };
 };
@@ -58,7 +51,7 @@ const addToCart = async (
 ) => {
   if (shouldUseApi(options)) {
     const resp = await api.post(
-      URL_CONSTANT.CartItem.ADD_CART_ITEM,
+      URL_CONSTANT.CartItem.PREFIX,
       {
         productId,
         quantity,
@@ -72,27 +65,26 @@ const addToCart = async (
 
   return {
     success: true,
-    message:
-      "Product added to cart successfully",
+    message: "Added successfully",
   };
 };
 
 /*
 |--------------------------------------------------------------------------
-| UPDATE CART ITEM
+| UPDATE CART ITEM (SYNC ID)
 |--------------------------------------------------------------------------
 */
 const updateCartItem = async (
-  itemId,
+  id,
   quantity,
   options = {}
 ) => {
   if (shouldUseApi(options)) {
     const resp = await api.put(
-      URL_CONSTANT.CartItem.UPDATE_CART_ITEM,
+      URL_CONSTANT.CartItem.PREFIX,
       {
-        id: itemId,
-        quantity,
+        itemId: id,
+        quantity: quantity,
       }
     );
 
@@ -103,26 +95,22 @@ const updateCartItem = async (
 
   return {
     success: true,
-    message:
-      "Cart item updated successfully",
+    message: "Updated successfully",
   };
 };
 
 /*
 |--------------------------------------------------------------------------
-| REMOVE CART ITEM
+| REMOVE CART ITEM (SYNC ID)
 |--------------------------------------------------------------------------
 */
 const removeCartItem = async (
-  itemId,
+  id,
   options = {}
 ) => {
   if (shouldUseApi(options)) {
     const resp = await api.delete(
-      URL_CONSTANT.CartItem.DELETE_CART_ITEM.replace(
-        "{id}",
-        itemId
-      )
+      `${URL_CONSTANT.CartItem.PREFIX}/${id}`
     );
 
     return resp.data;
@@ -132,8 +120,7 @@ const removeCartItem = async (
 
   return {
     success: true,
-    message:
-      "Cart item removed successfully",
+    message: "Removed successfully",
   };
 };
 
@@ -151,12 +138,11 @@ const clearCart = async (options = {}) => {
     return resp.data;
   }
 
-  await delay(200);
+  await delay(300);
 
   return {
     success: true,
-    message:
-      "Cart cleared successfully",
+    message: "Cart cleared",
   };
 };
 
@@ -164,10 +150,8 @@ export default {
   setApi,
 
   getCart,
-
   addToCart,
   updateCartItem,
   removeCartItem,
-
   clearCart,
 };

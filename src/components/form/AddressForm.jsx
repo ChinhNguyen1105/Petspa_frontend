@@ -1,26 +1,39 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Input } from '../common/Input';
 import { Button } from '../common/Button';
 import { useAddressStore } from '../../store/addressStore';
 
 /**
- * Component Form tạo địa chỉ giao hàng mới (Sử dụng Input string thông thường)
- * Đồng bộ hóa cả dạng Trang Độc Lập lẫn dạng Modal/Overlay
+ * Component Form Xử lý địa chỉ giao hàng (Thêm mới / Cập nhật / Xóa)
  */
-const AddressForm = ({ onSuccess, onCancel, userId = 101 }) => { // ĐỒNG BỘ: Sửa thành onSuccess
+const AddressForm = ({ initialData, onSuccess, onCancel, userId = 101 }) => { 
   const navigate = useNavigate();
-  const { addAddress, isLoading } = useAddressStore();
+  // Lấy thêm hàm editAddress và removeAddress từ Store đã viết sẵn
+  const { addAddress, editAddress, removeAddress, isLoading } = useAddressStore();
 
   const [formData, setFormData] = useState({
     receiverName: '',
     phone: '',
-    city: '',         
+    city: '',        
     district: '',     
     detailAddress: ''
   });
 
   const [errors, setErrors] = useState({});
+
+  // 🔄 ĐỒNG BỘ: Điền dữ liệu cũ vào form nếu component dùng cho mục đích CẬP NHẬT
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        receiverName: initialData.fullName || initialData.recipient_name || '',
+        phone: initialData.phone || initialData.phone_number || '',
+        city: initialData.province || initialData.province_city || '',
+        district: initialData.district || initialData.district_ward || '',
+        detailAddress: initialData.addressDetail || initialData.detail_address || ''
+      });
+    }
+  }, [initialData]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -28,6 +41,7 @@ const AddressForm = ({ onSuccess, onCancel, userId = 101 }) => { // ĐỒNG BỘ
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
   };
 
+  // ───────────────────────── XỬ LÝ LƯU (CREATE / UPDATE) ─────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -51,6 +65,7 @@ const AddressForm = ({ onSuccess, onCancel, userId = 101 }) => { // ĐỒNG BỘ
     }
 
     try {
+      // Map đúng cấu trúc SnakeCase như Backend yêu cầu
       const apiPayload = {
         user_id: Number(userId),
         recipient_name: formData.receiverName.trim(),
@@ -61,14 +76,22 @@ const AddressForm = ({ onSuccess, onCancel, userId = 101 }) => { // ĐỒNG BỘ
         address_type: "HOME"
       };
 
-      const response = await addAddress(apiPayload);
+      let response;
+      
+      if (initialData?.id) {
+        // Nếu có id cũ đầu vào -> Gọi API CẬP NHẬT
+        response = await editAddress(initialData.id, apiPayload);
+      } else {
+        // Nếu không có id -> Gọi API THÊM MỚI
+        response = await addAddress(apiPayload);
+      }
 
-      if (response.success) {
-        const savedAddress = response.data;
+      if (response && (response.success !== false)) {
+        const savedAddress = response.data || {};
         
         // Tạo cấu trúc CamelCase chuẩn để gửi ngược về cho Checkout Component nhận diện
         const formattedAddress = {
-          id: savedAddress.id || Date.now(),
+          id: savedAddress.id || initialData?.id || Date.now(),
           fullName: savedAddress.fullName || savedAddress.recipient_name || formData.receiverName.trim(),
           phone: savedAddress.phone || savedAddress.phone_number || formData.phone.trim(),
           addressDetail: savedAddress.addressDetail || savedAddress.detail_address || formData.detailAddress.trim(),
@@ -79,19 +102,40 @@ const AddressForm = ({ onSuccess, onCancel, userId = 101 }) => { // ĐỒNG BỘ
           fullAddress: savedAddress.fullAddress || `${formData.detailAddress.trim()}, ${formData.district.trim()}, ${formData.city.trim()}`
         };
 
-        // Nếu được gọi từ Modal Overlay (Có truyền onSuccess)
         if (onSuccess) {
           onSuccess(formattedAddress);
         } else {
-          // Nếu đứng ở một trang tạo địa chỉ độc lập (ví dụ /profile/address/create)
           navigate('/shop/checkout'); 
         }
       } else {
-        alert(response.message || "Không thể lưu địa chỉ, vui lòng kiểm tra lại.");
+        alert(response.message || "Không thể xử lý dữ liệu, vui lòng kiểm tra lại.");
       }
     } catch (err) {
-      console.error("Lỗi khi thêm địa chỉ thông qua Store:", err);
+      console.error("Lỗi khi xử lý địa chỉ thông qua Store:", err);
       alert("Hệ thống gặp sự cố khi lưu địa chỉ.");
+    }
+  };
+
+  // ───────────────────────── XỬ LÝ XÓA ─────────────────────────
+  const handleDelete = async () => {
+    if (!initialData?.id) return;
+    
+    if (window.confirm("Bạn có chắc chắn muốn xóa địa chỉ giao hàng này không?")) {
+      try {
+        const response = await removeAddress(initialData.id);
+        if (response.success) {
+          if (onCancel) {
+            onCancel(); // Đóng Modal/Overlay nếu có
+          } else {
+            navigate('/shop/checkout');
+          }
+        } else {
+          alert(response.message || "Xóa địa chỉ thất bại.");
+        }
+      } catch (err) {
+        console.error("Lỗi khi xóa địa chỉ:", err);
+        alert("Hệ thống gặp sự cố khi xóa địa chỉ.");
+      }
     }
   };
 
@@ -166,23 +210,40 @@ const AddressForm = ({ onSuccess, onCancel, userId = 101 }) => { // ĐỒNG BỘ
         {errors.detailAddress && <p className="text-xs text-red-500 font-bold mt-1.5 pl-2">{errors.detailAddress}</p>}
       </div>
 
-      <div className="flex gap-4 justify-end pt-5 mt-2">
-        <Button 
-          type="button" 
-          variant="outline" 
-          onClick={onCancel || (() => navigate(-1))}
-          disabled={isLoading}
-          className="rounded-[18px] border-[#1d3557] text-[#1d3557] hover:bg-slate-50 !py-3.5 !px-8 font-bold text-sm min-w-[120px] shadow-sm transition-all"
-        >
-          Hủy bỏ
-        </Button>
-        <Button 
-          type="submit"
-          disabled={isLoading}
-          className="rounded-[18px] bg-[#1d3557] hover:bg-[#14263f] text-white !py-3.5 !px-8 font-bold text-sm min-w-[140px] shadow-sm transition-all border-none"
-        >
-          {isLoading ? "Đang xử lý..." : "Lưu địa chỉ"}
-        </Button>
+      <div className="flex gap-4 justify-between pt-5 mt-2">
+        {/* NÚT XÓA: Chỉ hiển thị khi đang sửa một địa chỉ có sẵn */}
+        {initialData?.id ? (
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={handleDelete}
+            disabled={isLoading}
+            className="rounded-[18px] border-red-500 text-red-500 hover:bg-red-50 !py-3.5 !px-6 font-bold text-sm shadow-sm transition-all"
+          >
+            Xóa địa chỉ
+          </Button>
+        ) : (
+          <div /> /* Thẻ giữ chỗ để đẩy 2 nút kia về góc phải */
+        )}
+
+        <div className="flex gap-3">
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={onCancel || (() => navigate(-1))}
+            disabled={isLoading}
+            className="rounded-[18px] border-[#1d3557] text-[#1d3557] hover:bg-slate-50 !py-3.5 !px-8 font-bold text-sm min-w-[120px] shadow-sm transition-all"
+          >
+            Hủy bỏ
+          </Button>
+          <Button 
+            type="submit"
+            disabled={isLoading}
+            className="rounded-[18px] bg-[#1d3557] hover:bg-[#14263f] text-white !py-3.5 !px-8 font-bold text-sm min-w-[140px] shadow-sm transition-all border-none"
+          >
+            {isLoading ? "Đang xử lý..." : initialData?.id ? "Cập nhật" : "Lưu địa chỉ"}
+          </Button>
+        </div>
       </div>
     </form>
   );

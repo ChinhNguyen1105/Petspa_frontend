@@ -23,7 +23,6 @@ import { useCartStore } from '../../../store/cartStore';
 import { ROLE_OPTIONS } from '../../../constants';
 
 const UserManagement = () => {
-  // BÓC TÁCH STATE & ACTIONS TỪ USEUSERSTORE
   const { 
     users, 
     meta,
@@ -41,18 +40,15 @@ const UserManagement = () => {
     deleteUser 
   } = useUserStore();
 
-  // Toast notification kết nối từ cartStore
   const showToast = useCartStore((state) => state.showToast);
 
-  // Điều khiển Modal Form chính
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState('CREATE'); 
   const [selectedUser, setSelectedUser] = useState(null);
 
-  // Trạng thái cho các cửa sổ xác nhận (ConfirmModal)
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
-    type: '', // 'CANCEL_FORM', 'CONFIRM_UPDATE', 'CONFIRM_DELETE'
+    type: '', 
     title: '',
     message: '',
     pendingData: null
@@ -60,7 +56,6 @@ const UserManagement = () => {
 
   const roles = ROLE_OPTIONS;
 
-  // Lắng nghe thay đổi của bộ lọc để tự động fetch lại dữ liệu từ API
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers, keyword, selectedRole, page]);
@@ -77,7 +72,6 @@ const UserManagement = () => {
     setIsModalOpen(true);
   };
 
-  // Nhận dữ liệu bắn lên từ UserForm khi nhấn Lưu
   const handleFormSubmit = (formData) => {
     if (modalType === 'EDIT') {
       setConfirmModal({
@@ -92,25 +86,27 @@ const UserManagement = () => {
     }
   };
 
-  // Thực thi lưu xuống API thông qua Store Actions
+  // Đồng bộ cấu trúc kiểm tra điều kiện response theo Backend (status === "SUCCESS")
   const executeSaveUser = async (formData) => {
     try {
       if (modalType === 'CREATE') {
         const response = await createUser(formData);
-        if (response && response.success) {
+        if (response?.status === 'SUCCESS') {
           showToast('Thêm thành viên mới thành công!', 'success');
-          setIsModalOpen(false);
+          setIsModalOpen(false); 
           closeConfirmModal();
-          fetchUsers(); // Refresh lại danh sách trang đầu
+          setPage(1);
+          await fetchUsers(); 
         } else {
           showToast(response?.message || 'Đã xảy ra lỗi khi tạo.', 'error');
         }
       } else {
         const response = await updateUser(selectedUser.id, formData);
-        if (response && response.success) {
+        if (response?.status === 'SUCCESS') {
           showToast('Cập nhật thông tin thành viên thành công!', 'success');
-          setIsModalOpen(false);
+          setIsModalOpen(false); 
           closeConfirmModal();
+          await fetchUsers(); 
         } else {
           showToast(response?.message || 'Đã xảy ra lỗi khi cập nhật.', 'error');
         }
@@ -121,7 +117,6 @@ const UserManagement = () => {
     }
   };
 
-  // Xử lý chặn thoát khi Form đang nhập dở
   const handleCancelForm = () => {
     setConfirmModal({
       isOpen: true,
@@ -132,7 +127,6 @@ const UserManagement = () => {
     });
   };
 
-  // Xác nhận kích hoạt luồng xóa người dùng
   const handleConfirmDelete = (userId, userName) => {
     setConfirmModal({
       isOpen: true,
@@ -143,13 +137,15 @@ const UserManagement = () => {
     });
   };
 
+  // Đồng bộ cấu trúc kiểm tra điều kiện response theo Backend tại hàm Xóa
   const executeDeleteUser = async () => {
     const { id, name } = confirmModal.pendingData;
     try {
       const response = await deleteUser(id);
-      if (response && response.success) {
+      if (response?.status === 'SUCCESS') {
         showToast(`Đã xóa tài khoản "${name}" thành công!`, 'success');
         closeConfirmModal();
+        await fetchUsers(); 
       } else {
         showToast(response?.message || 'Xóa tài khoản thất bại.', 'error');
       }
@@ -159,7 +155,6 @@ const UserManagement = () => {
     }
   };
 
-  // Quản lý điều hướng nút "Đồng ý" của ConfirmModal
   const handleConfirmAction = () => {
     switch (confirmModal.type) {
       case 'CANCEL_FORM':
@@ -181,7 +176,6 @@ const UserManagement = () => {
     setConfirmModal({ isOpen: false, type: '', title: '', message: '', pendingData: null });
   };
 
-  // Hàm xử lý hiển thị Badge Trạng thái dựa theo deleteFlag và activeFlag
   const renderStatusBadge = (user) => {
     if (user.deleteFlag) {
       return (
@@ -204,7 +198,6 @@ const UserManagement = () => {
     );
   };
 
-  // Tính toán tổng số trang dựa trên meta data từ backend trả về
   const totalPages = meta?.total ? Math.ceil(meta.total / pageSize) : 1;
 
   return (
@@ -357,7 +350,7 @@ const UserManagement = () => {
       {/* Modal chính chứa Form */}
       <Modal 
         isOpen={isModalOpen} 
-        onClose={handleCancelForm} 
+        onClose={() => setIsModalOpen(false)} 
         title={modalType === 'CREATE' ? 'Thêm tài khoản người dùng' : 'Chỉnh sửa tài khoản'}
         size='lg'
       >
