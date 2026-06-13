@@ -56,11 +56,27 @@ const login = async (loginData, options = {}) => {
 const register = async (registerData, options = {}) => {
   const useReal = options.api !== undefined ? !!options.api : useApi;
 
+  // ========================
+  // PAYLOAD CHỈ THEO BACKEND
+  // ========================
+  const payload = {
+    name: registerData.name,
+    email: registerData.email,
+    password: registerData.password,
+    confirmPassword: registerData.confirmPassword,
+  };
+
   if (useReal) {
-    const resp = await api.post(URL_CONSTANT.Auth.REGISTER, registerData);
+    const resp = await api.post(
+      URL_CONSTANT.Auth.REGISTER,
+      payload
+    );
     return resp.data;
   }
 
+  // ========================
+  // MOCK MODE
+  // ========================
   await delay(1000);
 
   return {
@@ -70,10 +86,9 @@ const register = async (registerData, options = {}) => {
       ...registerMock.data,
       user: {
         ...registerMock.data.user,
-        id: `USR${Date.now()}`,
-        name: registerData.name || registerData.fullName || "New User",
-        email: registerData.email,
-      }
+        name: payload.name,
+        email: payload.email,
+      },
     },
   };
 };

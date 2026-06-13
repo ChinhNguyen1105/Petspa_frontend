@@ -21,6 +21,7 @@ const getBookings = async (params = {}, options = {}) => {
     const resp = await api.get(URL_CONSTANT.Booking.GET_ALL_BOOKINGS, {
       params,
     });
+    console.log("fetching bookings", resp);
     return unwrap(resp);
   }
 

@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Eye, EyeOff, Lock, Mail, Phone, ArrowRight, CheckCircle2, UserRound } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, ArrowRight, CheckCircle2, UserRound } from "lucide-react";
 
 // Components & Global Store
 import { Button } from "../../components/common/Button";
-import {Input} from "../../components/common/Input";
-import  {useAuthStore } from "../../store/authStore";
+import { Input } from "../../components/common/Input";
+import { useAuthStore } from "../../store/authStore";
 
 // Validators
 import { validateRegisterForm } from "../../utils/authValidator";
@@ -15,33 +15,24 @@ const Register = () => {
   
   // 💡 Lấy các trạng thái và hàm từ Zustand Store thông qua Selector chuẩn
   const loading = useAuthStore((state) => state.loading);
+  const serverError = useAuthStore((state) => state.error);
+  const registerAction = useAuthStore((state) => state.registerAction);
 
-const serverError = useAuthStore((state) => state.error);
-
-  const registerAction = useAuthStore(
-    (state) => state.registerAction
-);
-  console.log(typeof registerAction);
-  console.log(
-  "AUTH STORE:",
-  Object.keys(useAuthStore.getState())
-);
-  // Khởi tạo State lưu trữ Form dữ liệu nhập liệu
+  // Khởi tạo State lưu trữ Form dữ liệu nhập liệu (Đồng bộ 4 trường)
   const [formData, setFormData] = useState({
     name: "",
     email: "",
-    phone: "",
     password: "",
     confirmPassword: ""
   });
 
-  // Quản lý UI
+  // Quản lý trạng thái giao diện UI
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [validationError, setValidationError] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
 
-  // 🔥 Hàm xử lý thay đổi dữ liệu đầu vào (Sửa lỗi ReferenceError)
+  // Hàm xử lý thay đổi dữ liệu đầu vào
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -49,50 +40,50 @@ const serverError = useAuthStore((state) => state.error);
       [name]: value
     }));
     
-    // Tự động xóa lỗi cũ khi người dùng bắt đầu nhập lại dữ liệu
     if (validationError) setValidationError("");
   };
 
-  // Xử lý gửi Form Đăng ký
+  // Xử lý gửi Form Đăng ký và Điều Hướng
   const handleSubmit = async (e) => {
-    console.log('submit functioning');
     e.preventDefault();
     
-    // Kiểm tra dữ liệu đầu vào phía Client
+    // 1. Kiểm tra dữ liệu đầu vào phía Client thông qua Validator mới clean
     const validation = validateRegisterForm(formData);
     if (!validation.isValid) {
       setValidationError(validation.message);
       return;
     }
 
-    // Khối bảo vệ kiểm tra hàm đăng ký từ Store
     if (typeof registerAction !== "function") {
-      console.error("Zustand Store Error: registerAction không phải là một hàm hợp lệ.");
       setValidationError("Hệ thống đang được cập nhật. Vui lòng tải lại trang.");
       return;
     }
 
-    // Chuẩn hóa cấu trúc dữ liệu theo API của Backend (PetSpa)
-    const { confirmPassword, name, ...restData } = formData;
+    // 2. Chuẩn hóa payload đúng cấu trúc ReqRegister DTO Backend
     const submitData = {
-      full_name: name.trim(),
-      email: restData.email.trim(),
-      phone: restData.phone.trim(),
-      password: restData.password
+      name: formData.name.trim(),
+      email: formData.email.trim(),
+      password: formData.password,
+      confirmPassword: formData.confirmPassword
     };
 
-    // Gọi trực tiếp action từ Store
+    // 3. Thực thi hành động đăng ký qua Zustand Store
     const result = await registerAction(submitData);
-    console.log(result);
+    
     if (result?.success) {
+      // Kích hoạt trạng thái hiển thị màn hình chúc mừng
       setIsSuccess(true);
+      
+      // Kiểm tra vai trò (Role) của User từ phản hồi hệ thống để điều hướng chính xác
+      const userRole = result?.data?.user?.role?.name?.toUpperCase() || "";
+      
       setTimeout(() => {
-        navigate("/", { replace: true });
-      }, 3000);
+          navigate("/", { replace: true });
+      }, 3000); // Chờ 3 giây để người dùng đọc thông tin đăng ký thành công
     }
   };
 
-  // MÀN HÌNH CHÚC MỪNG KHI ĐĂNG KÝ THÀNH CÔNG
+  // MÀN HÌNH CHÚC MỪNG KHI ĐĂNG KÝ THÀNH CÔNG (UX INTERMEDIATE STATE)
   if (isSuccess) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
@@ -106,8 +97,8 @@ const serverError = useAuthStore((state) => state.error);
               Chào mừng thành viên mới gia nhập mái nhà chung <span className="text-pet-blue font-bold">PetSpa</span>.
             </p>
           </div>
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-xs font-semibold text-slate-500">
-            Hệ thống đang tự động tối ưu hóa tài khoản và đưa bạn vào trang chủ...
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-xs font-semibold text-slate-500 animate-pulse">
+            Hệ thống đang tự động tối ưu hóa tài khoản và đưa bạn vào hệ thống...
           </div>
         </div>
       </div>
@@ -121,16 +112,6 @@ const serverError = useAuthStore((state) => state.error);
       <div className="lg:col-span-5 flex flex-col justify-center px-8 sm:px-16 lg:px-12 xl:px-16 bg-white z-10 relative shadow-xl py-12 max-h-screen overflow-y-auto no-scrollbar">
         <div className="max-w-md w-full mx-auto">
           
-          {/* Logo Quay về trang chủ
-          <div className="flex items-center gap-2 mb-6 cursor-pointer inline-flex" onClick={() => navigate("/")}>
-            <div className="w-10 h-10 bg-pet-blue rounded-xl flex items-center justify-center text-white font-black text-xl">
-              P
-            </div>
-            <span className="text-xl font-black text-slate-800 uppercase tracking-wider">
-              Pet<span className="text-pet-orange">Spa</span>
-            </span>
-          </div> */}
-
           {/* Tiêu đề */}
           <div className="mb-6">
             <h2 className="text-3xl font-black text-slate-800 tracking-tight uppercase">Tạo Tài Khoản</h2>
@@ -178,25 +159,6 @@ const serverError = useAuthStore((state) => state.error);
                   name="email"
                   placeholder="bossyeu@example.com"
                   value={formData.email}
-                  onChange={handleChange}
-                  className="pl-10 w-full bg-slate-50 border-slate-200 focus:bg-white rounded-xl py-2.5 text-sm"
-                  disabled={loading}
-                />
-              </div>
-            </div>
-
-            {/* Ô nhập Số điện thoại */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Số điện thoại</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                  <Phone size={18} />
-                </div>
-                <Input
-                  type="tel"
-                  name="phone"
-                  placeholder="0912345678"
-                  value={formData.phone}
                   onChange={handleChange}
                   className="pl-10 w-full bg-slate-50 border-slate-200 focus:bg-white rounded-xl py-2.5 text-sm"
                   disabled={loading}
