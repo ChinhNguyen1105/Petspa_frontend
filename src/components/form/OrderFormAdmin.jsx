@@ -6,17 +6,22 @@ import { useProductStore } from '../../store/productStore';
 const OrderFormAdmin = ({ initialData, onSubmit, onClose, mode }) => {
   const { products: availableProducts, fetchProducts } = useProductStore();
 
+  // Hàm helper chuyển đổi định dạng ISO từ API sang định dạng cho input datetime-local (YYYY-MM-DDTHH:mm)
+  const formatISODateToInput = (isoString) => {
+    if (!isoString) return "";
+    return isoString.substring(0, 16); 
+  };
+
   const [formData, setFormData] = useState({
-    id:               initialData?.id              || '',
-    order_code:       initialData?.order_code      || `ORD-${Date.now()}`,
-    customer_name:    initialData?.customer?.full_name || '',
-    customer_id:      initialData?.customer?.id    || Date.now() + 1,
-    shipping_address: initialData?.shipping_address || '',
-    payment_method:   initialData?.payment_method  || 'COD',
-    payment_status:   initialData?.payment_status  || 'UNPAID',
-    status:           initialData?.status          || 'PENDING',
-    items:            initialData?.items           || [],
-    total_amount:     initialData?.total_amount    || 0,
+    id: initialData?.id || "",
+    createdDate: initialData?.createdDate || "",
+    customer_name: initialData?.shippingName || "",
+    shipping_phone: initialData?.shippingPhone || "",
+    shipping_address: initialData?.shippingAddressFull || "",
+    payment_status: initialData?.paymentStatus || "PENDING", // Đồng bộ theo mẫu "SUCCESS", "PENDING",...
+    status: initialData?.status || "PENDING",
+    items: initialData?.orderDetails || [],
+    total_amount: initialData?.totalAmount || 0,
   });
 
   // ─── LOAD SẢN PHẨM TỪ STORE ─────────────────────────────────────────────────
@@ -27,7 +32,7 @@ const OrderFormAdmin = ({ initialData, onSubmit, onClose, mode }) => {
   // ─── TÍNH LẠI TỔNG TIỀN KHI ITEMS THAY ĐỔI ──────────────────────────────────
   useEffect(() => {
     const total = formData.items.reduce(
-      (sum, item) => sum + item.price * item.quantity,
+      (sum, item) => sum + (item.unitPrice || 0) * (item.quantity || 0),
       0
     );
     setFormData(prev => ({ ...prev, total_amount: total }));
@@ -36,12 +41,16 @@ const OrderFormAdmin = ({ initialData, onSubmit, onClose, mode }) => {
   // ─── HANDLERS ────────────────────────────────────────────────────────────────
   const handleItemChange = (index, field, value) => {
     const updatedItems = [...formData.items];
+    const numericValue = Number(value) || 0;
+
     updatedItems[index] = {
       ...updatedItems[index],
-      [field]: field === 'quantity' || field === 'price' ? Number(value) : value,
+      [field]: field === 'quantity' || field === 'unitPrice' ? numericValue : value,
     };
-    updatedItems[index].subtotal =
-      updatedItems[index].quantity * updatedItems[index].price;
+
+    updatedItems[index].totalAmount =
+      updatedItems[index].quantity * updatedItems[index].unitPrice;
+
     setFormData(prev => ({ ...prev, items: updatedItems }));
   };
 
@@ -52,14 +61,17 @@ const OrderFormAdmin = ({ initialData, onSubmit, onClose, mode }) => {
     );
 
     if (found) {
-      updatedItems[index].product = { id: found.id, name: found.name };
-      updatedItems[index].price   = found.price;
+      updatedItems[index].productId = found.id;
+      updatedItems[index].productName = found.name;
+      updatedItems[index].productImage = found.image || "";
+      updatedItems[index].unitPrice = found.price;
     } else {
-      updatedItems[index].product = { ...updatedItems[index].product, name: value };
+      updatedItems[index].productName = value;
     }
 
-    updatedItems[index].subtotal =
-      updatedItems[index].quantity * updatedItems[index].price;
+    updatedItems[index].totalAmount =
+      updatedItems[index].quantity * updatedItems[index].unitPrice;
+
     setFormData(prev => ({ ...prev, items: updatedItems }));
   };
 
@@ -68,7 +80,15 @@ const OrderFormAdmin = ({ initialData, onSubmit, onClose, mode }) => {
       ...prev,
       items: [
         ...prev.items,
-        { id: Date.now(), product: { id: Date.now() + 2, name: '' }, quantity: 1, price: 0, subtotal: 0 },
+        { 
+          id: Date.now(), 
+          productId: "", 
+          productImage: "",
+          productName: '', 
+          quantity: 1, 
+          unitPrice: 0, 
+          totalAmount: 0 
+        },
       ],
     }));
   };
@@ -91,10 +111,10 @@ const OrderFormAdmin = ({ initialData, onSubmit, onClose, mode }) => {
 
   // ─── RENDER ──────────────────────────────────────────────────────────────────
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 max-h-[75vh] overflow-y-auto pr-2">
+    <form onSubmit={handleSubmit} className="space-y-6 max-h-[75vh] overflow-y-auto pr-2 no-scrollbar">
 
-      {/* Khách hàng & Địa chỉ */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Khách hàng & Số điện thoại & Ngày tạo */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Tên khách hàng</label>
           <input
@@ -107,43 +127,54 @@ const OrderFormAdmin = ({ initialData, onSubmit, onClose, mode }) => {
           />
         </div>
         <div>
-          <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Địa chỉ giao hàng</label>
+          <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Số điện thoại</label>
           <input
             type="text"
             required
             disabled={mode === 'VIEW'}
-            value={formData.shipping_address}
-            onChange={(e) => setFormData({ ...formData, shipping_address: e.target.value })}
+            value={formData.shipping_phone}
+            onChange={(e) => setFormData({ ...formData, shipping_phone: e.target.value })}
             className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 disabled:opacity-70"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Ngày tạo đơn</label>
+          <input
+            type="datetime-local"
+            disabled // Thường ngày tạo do hệ thống sinh ra nên để disabled ở form admin
+            value={formatISODateToInput(formData.createdDate)}
+            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none disabled:opacity-70 text-gray-500"
           />
         </div>
       </div>
 
+      {/* Địa chỉ giao hàng */}
+      <div>
+        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Địa chỉ giao hàng</label>
+        <input
+          type="text"
+          required
+          disabled={mode === 'VIEW'}
+          value={formData.shipping_address}
+          onChange={(e) => setFormData({ ...formData, shipping_address: e.target.value })}
+          className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 disabled:opacity-70"
+        />
+      </div>
+
       {/* Trạng thái đơn hàng & Thanh toán */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100">
-        <div>
-          <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Phương thức thanh toán</label>
-          <select
-            disabled={mode === 'VIEW'}
-            value={formData.payment_method}
-            onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 focus:outline-none"
-          >
-            <option value="COD">COD (Tiền mặt)</option>
-            <option value="BANK_TRANSFER">Chuyển khoản ngân hàng</option>
-          </select>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100">
         <div>
           <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Trạng thái thanh toán</label>
           <select
             disabled={mode === 'VIEW'}
             value={formData.payment_status}
             onChange={(e) => setFormData({ ...formData, payment_status: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 focus:outline-none"
+            className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 focus:outline-none focus:border-orange-500"
           >
-            <option value="UNPAID">Chưa thanh toán</option>
-            <option value="PAID">Đã thanh toán</option>
-            <option value="REFUNDED">Đã hoàn tiền</option>
+            <option value="PENDING">Chờ thanh toán (PENDING)</option>
+            <option value="SUCCESS">Đã thanh toán (SUCCESS)</option>
+            <option value="FAILED">Thanh toán thất bại (FAILED)</option>
+            <option value="REFUNDED">Đã hoàn tiền (REFUNDED)</option>
           </select>
         </div>
         <div>
@@ -152,13 +183,13 @@ const OrderFormAdmin = ({ initialData, onSubmit, onClose, mode }) => {
             disabled={mode === 'VIEW'}
             value={formData.status}
             onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 focus:outline-none"
+            className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 focus:outline-none focus:border-orange-500"
           >
-            <option value="PENDING">Chờ xử lý</option>
-            <option value="CONFIRMED">Đã xác nhận</option>
-            <option value="SHIPPING">Đang giao hàng</option>
-            <option value="COMPLETED">Đã hoàn thành</option>
-            <option value="CANCELLED">Đã hủy</option>
+            <option value="PENDING">Chờ xử lý (PENDING)</option>
+            <option value="CONFIRMED">Đã xác nhận (CONFIRMED)</option>
+            <option value="SHIPPING">Đang giao hàng (SHIPPING)</option>
+            <option value="COMPLETED">Đã hoàn thành (COMPLETED)</option>
+            <option value="CANCELLED">Đã hủy (CANCELLED)</option>
           </select>
         </div>
       </div>
@@ -184,13 +215,21 @@ const OrderFormAdmin = ({ initialData, onSubmit, onClose, mode }) => {
               key={item.id || index}
               className="flex flex-col sm:flex-row gap-2 bg-white border border-gray-100 p-3 rounded-xl shadow-sm items-center"
             >
+              {item.productImage && (
+                <img 
+                  src={item.productImage} 
+                  alt={item.productName} 
+                  className="w-10 h-10 object-cover rounded-lg hidden sm:block border"
+                />
+              )}
+              
               <div className="w-full sm:flex-1 relative">
                 <input
                   type="text"
                   placeholder="Nhập hoặc chọn sản phẩm..."
                   required
                   disabled={mode === 'VIEW'}
-                  value={item.product?.name || ''}
+                  value={item.productName || ''}
                   onChange={(e) => handleProductNameChange(index, e.target.value)}
                   list="product-suggestions"
                   className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-lg text-sm focus:outline-none"
@@ -215,13 +254,13 @@ const OrderFormAdmin = ({ initialData, onSubmit, onClose, mode }) => {
                   min="0"
                   required
                   disabled={mode === 'VIEW'}
-                  value={item.price}
-                  onChange={(e) => handleItemChange(index, 'price', e.target.value)}
+                  value={item.unitPrice}
+                  onChange={(e) => handleItemChange(index, 'unitPrice', e.target.value)}
                   className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-lg text-sm font-bold text-right focus:outline-none"
                 />
               </div>
               <div className="w-32 text-right font-black text-slate-800 text-sm hidden sm:block">
-                {formatPrice(item.subtotal || item.price * item.quantity)}
+                {formatPrice(item.totalAmount || item.unitPrice * item.quantity)}
               </div>
               {mode !== 'VIEW' && (
                 <button
@@ -243,7 +282,6 @@ const OrderFormAdmin = ({ initialData, onSubmit, onClose, mode }) => {
         </div>
       </div>
 
-      {/* Datalist gợi ý sản phẩm từ store */}
       <datalist id="product-suggestions">
         {availableProducts.map(p => (
           <option key={p.id} value={p.name}>{formatPrice(p.price)}</option>

@@ -19,6 +19,7 @@ const ServiceList = () => {
     meta,
     loading: loadingServices,
     fetchServices,
+    type = "SERVICE",
   } = useServiceStore();
 
   const {
@@ -27,14 +28,18 @@ const ServiceList = () => {
     fetchCategories,
   } = useCategoryStore();
 
+const filteredCategories = Array.isArray(categories) 
+  ? categories.filter(cat => cat && cat.categoryType === "SERVICE") 
+    : [];
+  
   // Mount: Chỉ fetch danh mục 1 lần duy nhất
   useEffect(() => {
-    fetchCategories({ type: "SERVICE" });
+    fetchCategories();
   }, []);
 
   // TRIGGER EFFECT: Lấy dữ liệu theo meta, tự động gọi API khi có thay đổi
   useEffect(() => {
-    // 🌟 SỬA TẠI ĐÂY: Sử dụng meta?.pageSize hoặc fallback an toàn là 12
+    // SỬA TẠI ĐÂY: Sử dụng meta?.pageSize hoặc fallback an toàn là 12
     const currentSize = meta?.pageSize || 12;
 
     const delayDebounceFn = setTimeout(() => {
@@ -108,8 +113,8 @@ const ServiceList = () => {
               Tất Cả
             </button>
 
-            {Array.isArray(categories) &&
-              categories.map((cat, index) => {
+            {Array.isArray(filteredCategories) &&
+              filteredCategories.map((cat, index) => {
                 const categoryName = typeof cat === "string" ? cat : cat.name || cat.title;
                 const currentId = cat.id !== undefined ? cat.id : index;
                 if (!categoryName) return null;

@@ -3,19 +3,12 @@ import {
   Search, 
   Edit2, 
   Trash2, 
-  Filter, 
-  AlertCircle, 
-  RefreshCw, 
-  Package, 
-  Layers, 
   ChevronRight,
   Eye,
   User,
   MapPin,
-  CreditCard,
-  DollarSign,
-  Plus,
-  X
+  Package,
+  Plus
 } from 'lucide-react';
 import Loading from '../../../components/common/Loading';
 import { formatPrice } from '../../../utils/formatPrice';
@@ -25,7 +18,7 @@ import ConfirmModal from '../../../components/common/ConfirmModal';
 import { useCartStore } from '../../../store/cartStore';
 import { useOrderStore } from '../../../store/orderStore';
 import OrderFormAdmin from '../../../components/form/OrderFormAdmin';
-import { STATUS_FILTERS } from '../../../constants';
+import { STATUS_FILTERS, STATUS_CONFIG, PAYMENT_STATUS_CONFIG } from '../../../constants'; 
 import Pagination from '../../../components/common/Pagination';
 
 // ==========================================
@@ -34,7 +27,7 @@ import Pagination from '../../../components/common/Pagination';
 const OrderManagement = () => {
   // --- TẬN DỤNG TRẠNG THÁI VÀ ACTIONS TỪ ZUSTAND STORE ---
   const orders            = useOrderStore((state) => state.orders) || [];
-  const meta              = useOrderStore((state) => state.meta); // Kế thừa cấu trúc cấu hình backend { page, pageSize, pages, total }
+  const meta              = useOrderStore((state) => state.meta); 
   const loading           = useOrderStore((state) => state.loading);
   const errorStore        = useOrderStore((state) => state.error);
   const fetchOrders       = useOrderStore((state) => state.fetchOrders);
@@ -64,21 +57,41 @@ const OrderManagement = () => {
   });
 
   const showToast = useCartStore((state) => state.showToast);
-  const statusOptions = STATUS_FILTERS;
 
-  // ─── FETCH KHI THAY ĐỔI TRANG HOẶC BỘ LỌC TỪ BACKEND ───────────────────────
+  // ─── FETCH DỮ LIỆU TỪ STORE ĐẦU KỲ VÀ KHI ĐỔI TRANG ────────────────────────
   useEffect(() => {
     fetchOrders({ 
       page: currentPage, 
-      search: searchTerm.trim(), 
-      status: selectedStatus 
+      search: searchTerm.trim()
+      // Loại bỏ việc gửi status lên API nếu bạn muốn thực hiện lọc thuần hoàn toàn ở Frontend
     });
-  }, [currentPage, searchTerm, selectedStatus, fetchOrders]);
+  }, [currentPage, searchTerm, fetchOrders]);
 
-  // Reset về trang 1 khi filter thay đổi để tránh lỗi rỗng trang
+  // Reset về trang 1 khi từ khóa tìm kiếm hoặc bộ lọc thay đổi để tránh lệch layout trang rỗng
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, selectedStatus]);
+
+  // ─── LOGIC LỌC DỮ LIỆU TRÊN FRONTEND ────────────────────────────────────────
+  const filteredOrders = orders.filter((order) => {
+    // 1. Lọc theo trạng thái của bộ Dropdown
+    if (selectedStatus !== 'ALL' && order.status !== selectedStatus) {
+      return false;
+    }
+    
+    // 2. Lọc thêm theo từ khóa search (mã đơn, tên, số điện thoại hoặc địa chỉ)
+    if (searchTerm.trim() !== '') {
+      const searchLower = searchTerm.toLowerCase();
+      const matchId = order.id?.toString().toLowerCase().includes(searchLower);
+      const matchName = order.shippingName?.toLowerCase().includes(searchLower);
+      const matchPhone = order.shippingPhone?.toLowerCase().includes(searchLower);
+      const matchAddress = order.shippingAddressFull?.toLowerCase().includes(searchLower);
+      
+      return matchId || matchName || matchPhone || matchAddress;
+    }
+
+    return true;
+  });
 
   // ─── MODAL HANDLERS ────────────────────────────────────────────────────────
   const handleOpenCreateModal = () => {
@@ -99,7 +112,6 @@ const OrderManagement = () => {
     setIsModalOpen(true);
   };
 
-  // 1. Khi bấm Lưu trên Form
   const handleFormSubmit = (formOutputData) => {
     if (modalType === 'EDIT') {
       setConfirmModal({
@@ -120,30 +132,19 @@ const OrderManagement = () => {
     }
   };
 
-  // Lõi thực thi Lưu bằng cách gọi Store Actions
   const executeSaveOrder = async () => {
     const formOutputData = confirmModal.pendingData;
     try {
       const mappedPayload = {
-        id: formOutputData.id,
-        userId: formOutputData.userId,
-        userName: formOutputData.userName,
-        userEmail: formOutputData.userEmail,
-        shippingName: formOutputData.shippingName || formOutputData.userName,
-        shippingPhone: formOutputData.shippingPhone,
-        shippingAddressFull: formOutputData.shippingAddressFull,
-        totalQuantity: formOutputData.totalQuantity,
-        totalAmount: formOutputData.totalAmount,
+        id: formOutputData.id || undefined,
+        shippingName: formOutputData.customer_name,
+        shippingPhone: formOutputData.shipping_phone,
+        shippingAddressFull: formOutputData.shipping_address,
+        paymentStatus: formOutputData.payment_status,
         status: formOutputData.status,
-        paymentMethod: formOutputData.paymentMethod,
-        paymentStatus: formOutputData.paymentStatus,
-        activeFlag: true,
-        deleteFlag: false,
-        createdBy: formOutputData.userEmail,
-        lastModifiedBy: "staff@gmail.com",
-        orderDetails: formOutputData.orderDetails || [],
+        orderDetails: formOutputData.items || [],
+        totalAmount: formOutputData.total_amount,
         createdDate: selectedOrder?.createdDate || new Date().toISOString(),
-        lastModifiedDate: new Date().toISOString()
       };
 
       if (modalType === 'CREATE') {
@@ -156,11 +157,19 @@ const OrderManagement = () => {
       } else {
         const res = await updateOrderStatus(selectedOrder.id, formOutputData.status);
         if (res?.success !== false) {
-          // Đồng bộ state cục bộ ngay lập tức tương tự như Booking
           setStoreState((state) => ({
-            orders: state.orders.map(o => o.id === selectedOrder.id ? { ...o, status: formOutputData.status } : o)
+            orders: state.orders.map(o => o.id === selectedOrder.id ? { 
+              ...o, 
+              status: formOutputData.status,
+              paymentStatus: formOutputData.payment_status,
+              shippingName: formOutputData.customer_name,
+              shippingPhone: formOutputData.shipping_phone,
+              shippingAddressFull: formOutputData.shipping_address,
+              orderDetails: formOutputData.items,
+              totalAmount: formOutputData.total_amount
+            } : o)
           }));
-          showToast(`Đã lưu thay đổi cho đơn hàng #${formOutputData.id}!`, 'success');
+          showToast(`Đã lưu thay đổi cho đơn hàng #${selectedOrder.id}!`, 'success');
         } else {
           showToast(res?.message || 'Gặp sự cố khi cập nhật đơn hàng.', 'error');
         }
@@ -174,7 +183,6 @@ const OrderManagement = () => {
     }
   };
 
-  // 2. Khi bấm Hủy/Đóng Form
   const handleCancelForm = () => {
     if (modalType === 'VIEW') {
       setIsModalOpen(false);
@@ -189,7 +197,6 @@ const OrderManagement = () => {
     });
   };
 
-  // 3. Xóa/Hủy đơn hàng qua Store
   const handleConfirmDelete = (orderId) => {
     setConfirmModal({
       isOpen: true,
@@ -215,7 +222,6 @@ const OrderManagement = () => {
     }
   };
 
-  // ─── CONFIRM MODAL DISPATCHER ──────────────────────────────────────────────
   const handleConfirmAction = () => {
     switch (confirmModal.type) {
       case 'CANCEL_FORM':     setIsModalOpen(false); closeConfirmModal(); break;
@@ -230,7 +236,6 @@ const OrderManagement = () => {
     setConfirmModal({ isOpen: false, type: '', title: '', message: '', pendingData: null });
   };
 
-  // ─── RENDER ────────────────────────────────────────────────────────────────
   if (loading) return <div className="flex h-[60vh] items-center justify-center"><Loading size="large" /></div>;
   if (errorStore) return <div className="text-center p-6 text-red-500">{errorStore}</div>;
 
@@ -261,12 +266,15 @@ const OrderManagement = () => {
             className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 text-gray-700" 
           />
         </div>
+        {/* Bộ select đồng bộ trạng thái */}
         <select 
           value={selectedStatus} 
           onChange={(e) => setSelectedStatus(e.target.value)} 
           className="w-full sm:w-56 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 focus:outline-none"
         >
-          {statusOptions.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          {STATUS_FILTERS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
         </select>
       </div>
 
@@ -285,7 +293,8 @@ const OrderManagement = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {orders.length === 0 ? (
+              {/* Duyệt qua mảng dữ liệu đã lọc filteredOrders thay vì mảng orders gốc */}
+              {filteredOrders.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="p-12 text-center text-gray-400">
                     <Package size={36} className="mx-auto mb-2 text-gray-300" />
@@ -293,8 +302,10 @@ const OrderManagement = () => {
                   </td>
                 </tr>
               ) : (
-                orders.map((order) => {
-                  const matchedStatus = statusOptions.find(s => s.value === order.status);
+                filteredOrders.map((order) => {
+                  const statusInfo = STATUS_CONFIG[order.status];
+                  const paymentInfo = PAYMENT_STATUS_CONFIG[order.paymentStatus];
+
                   return (
                     <tr key={order.id} className="hover:bg-gray-50/50 transition-colors group">
                       <td className="p-4">
@@ -302,8 +313,8 @@ const OrderManagement = () => {
                         <div className="font-bold text-blue-600 font-mono tracking-tight text-sm">#{order.id}</div>
                       </td>
                       <td className="p-4">
-                        <div className="font-bold text-gray-800 text-base flex items-center gap-1.5">
-                          <User size={14} className="text-gray-400" /> {order.userName}
+                        <div className="font-bold text-gray-800 text-sm flex items-center gap-1.5">
+                          <User size={14} className="text-gray-400" /> {order.shippingName}
                         </div>
                         <div className="text-xs text-gray-400 max-w-xs truncate flex items-center gap-1 mt-0.5">
                           <MapPin size={12} className="shrink-0" /> {order.shippingAddressFull}
@@ -320,13 +331,13 @@ const OrderManagement = () => {
                       </td>
                       <td className="p-4">
                         <div className="font-black text-gray-900 text-base">{formatPrice(order.totalAmount)}</div>
-                        <div className="text-[10px] uppercase font-extrabold px-1.5 py-0.5 rounded w-max mt-1 bg-slate-100 text-slate-500">
-                          {order.paymentMethod} • {order.paymentStatus === 'SUCCESS' ? 'Đã Thanh Toán' : 'Chưa Trả Tiền'}
+                        <div className={`text-[10px] font-bold px-2 py-0.5 rounded border w-max mt-1 ${paymentInfo ? paymentInfo.color : 'text-gray-600 bg-gray-50 border-gray-200'}`}>
+                          {paymentInfo ? paymentInfo.label : order.paymentStatus}
                         </div>
                       </td>
                       <td className="p-4 text-center">
-                        <span className={`inline-flex items-center text-xs font-bold px-3 py-1 rounded-full ${matchedStatus?.color || 'bg-gray-100'}`}>
-                          {matchedStatus?.label || 'Không rõ'}
+                        <span className={`inline-flex items-center text-xs font-bold px-3 py-1 rounded-full border ${statusInfo ? statusInfo.className : 'bg-gray-100 text-gray-600'}`}>
+                          {statusInfo ? statusInfo.text : order.status}
                         </span>
                       </td>
                       <td className="p-4 text-right">
@@ -336,9 +347,6 @@ const OrderManagement = () => {
                           </button>
                           <button onClick={() => handleOpenEditModal(order)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl border border-transparent hover:border-blue-200 transition-all" title="Sửa thông tin">
                             <Edit2 size={16} />
-                          </button>
-                          <button onClick={() => handleConfirmDelete(order.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl border border-transparent hover:border-red-200 transition-all" title="Xóa/Hủy đơn">
-                            <Trash2 size={16} />
                           </button>
                         </div>
                       </td>
@@ -350,7 +358,7 @@ const OrderManagement = () => {
           </table>
         </div>
 
-        {/* ─── PAGINATION (KẾ THỪA CHUẨN TỪ TRANG BOOKING) ──────────────────────── */}
+        {/* ─── PAGINATION ──────────────────────── */}
         {meta && meta.pages > 1 && (
           <div className="p-4 border-t border-gray-100 bg-gray-50/50">
             <Pagination
@@ -377,7 +385,7 @@ const OrderManagement = () => {
         />
       </Modal>
 
-      {/* CONFIRM_MODAL ĐỂ ĐỒNG BỘ TRẢI NGHIỆM */}
+      {/* CONFIRM_MODAL */}
       <ConfirmModal
         isOpen={confirmModal.isOpen}
         onClose={closeConfirmModal}

@@ -6,11 +6,6 @@ export const USER_STATUS_CONFIG = {
     color: "text-green-600 bg-green-50 border-green-200",
   },
 
-  PROBATION: {
-    label: "Thử việc",
-    color: "text-blue-600 bg-blue-50 border-blue-200",
-  },
-
   SUSPENDED: {
     label: "Tạm đình chỉ",
     color: "text-yellow-600 bg-yellow-50 border-yellow-200",

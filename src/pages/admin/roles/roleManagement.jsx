@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
-import { useRolePermissionStore } from "../../../store/roleStore"; // Đồng bộ theo import của bạn
+import React, { useEffect, useState, useMemo } from "react";
+import { useRoleStore } from "../../../store/roleStore"; 
+import { usePermissionStore } from "../../../store/permissionStore";
 import { useCartStore } from "../../../store/cartStore"; // Sử dụng showToast đồng bộ hệ thống
 import { 
   Shield, 
@@ -18,21 +19,28 @@ import Loading from "../../../components/common/Loading";
 import ConfirmModal from "../../../components/common/ConfirmModal";
 
 const RoleManagement = () => {
-  const {
-    roles,
-    permissionsByModule,
-    loading,
-    error,
-    fetchRoles,
-    fetchPermissions,
-    updatePermissionsForRole,
-  } = useRolePermissionStore();
+  // ── 1. ĐỒNG BỘ STORE VAI TRÒ (useRoleStore) ──
+  const roles = useRoleStore((state) => state.roles);
+  const loadingRoles = useRoleStore((state) => state.loading);
+  const errorRoles = useRoleStore((state) => state.error);
+  const fetchRoles = useRoleStore((state) => state.fetchRoles);
+  const updateRole = useRoleStore((state) => state.updateRole);
+
+  // ── 2. ĐỒNG BỘ STORE QUYỀN HẠN (usePermissionStore) ──
+  const permissions = usePermissionStore((state) => state.permissions);
+  const loadingPermissions = usePermissionStore((state) => state.loading);
+  const errorPermissions = usePermissionStore((state) => state.error);
+  const fetchPermissions = usePermissionStore((state) => state.fetchPermissions);
+
+  // Gộp trạng thái loading và error để giao diện hiển thị tập trung
+  const isLoadingCombined = loadingRoles || loadingPermissions;
+  const combinedError = errorRoles || errorPermissions;
 
   // ── LOCAL UI STATE ──
   const [selectedRole, setSelectedRole] = useState(null);
   const [checkedPermissionIds, setCheckedPermissionIds] = useState([]);
   
-  // Trạng thái cho Modal Xác nhận (Đồng bộ cấu trúc mẫu)
+  // Trạng thái cho Modal Xác nhận
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     type: "", 
@@ -43,28 +51,54 @@ const RoleManagement = () => {
 
   const showToast = useCartStore((state) => state.showToast);
 
-  // 1. Nạp dữ liệu ban đầu (Sử dụng hàm reference an toàn trong dependency)
+  // ── 3. NẠP DỮ LIỆU BAN ĐẦU ──
   useEffect(() => {
     const initData = async () => {
-      await Promise.all([fetchRoles(), fetchPermissions()]);
+      // Gọi đồng thời cả 2 API lấy Roles và Toàn bộ Permissions hệ thống
+      await Promise.all([
+        fetchRoles({ pageSize: 100 }), 
+        fetchPermissions({ pageSize: 200 })
+      ]);
     };
     initData();
   }, [fetchRoles, fetchPermissions]);
 
-  // 2. Mặc định chọn Vai trò đầu tiên khi danh sách tải xong
+  // ── 4. MẶC ĐỊNH CHỌN VAI TRÒ ĐẦU TIÊN KHI TẢI XONG DỮ LIỆU ──
   useEffect(() => {
     if (roles.length > 0 && !selectedRole) {
       handleSelectRole(roles[0]);
+    } else if (selectedRole) {
+      // Cập nhật lại thông tin đồng bộ nếu danh sách roles trong store thay đổi
+      const updatedRole = roles.find(r => r.id === selectedRole.id);
+      if (updatedRole && JSON.stringify(updatedRole.permissionIds) !== JSON.stringify(selectedRole.permissionIds)) {
+        setSelectedRole(updatedRole);
+      }
     }
   }, [roles, selectedRole]);
 
-  // 3. Xử lý đổi Vai trò
+  // ── 5. LOGIC TỰ ĐỘNG NHÓM QUYỀN HẠN THEO MODULE ──
+  // Biến mảng phẳng phẳng từ backend thành Object phân nhóm real-time
+  const permissionsByModule = useMemo(() => {
+    if (!permissions || permissions.length === 0) return {};
+    
+    return permissions.reduce((acc, curr) => {
+      // Lấy tên Phân hệ từ trường module hoặc từ apiPath (ví dụ: "/api/v1/products" -> lấy "products")
+      const moduleName = curr.module || curr.apiPath?.split("/")[3]?.toUpperCase() || "HỆ THỐNG CHUNG";
+      if (!acc[moduleName]) {
+        acc[moduleName] = [];
+      }
+      acc[moduleName].push(curr);
+      return acc;
+    }, {});
+  }, [permissions]);
+
+  // Xử lý đổi Vai trò
   const handleSelectRole = (role) => {
     setSelectedRole(role);
     setCheckedPermissionIds(role.permissionIds || []);
   };
 
-  // 4. Xử lý bật/tắt từng ô checkbox quyền đơn lẻ
+  // Xử lý bật/tắt từng ô checkbox quyền đơn lẻ
   const handleTogglePermission = (permissionId) => {
     setCheckedPermissionIds((prev) =>
       prev.includes(permissionId)
@@ -73,7 +107,7 @@ const RoleManagement = () => {
     );
   };
 
-  // 5. Xử lý bật/tắt nhanh TẤT CẢ quyền lợi của một Phân hệ (Module)
+  // Xử lý bật/tắt nhanh TẤT CẢ quyền lợi của một Phân hệ (Module)
   const handleToggleModuleAll = (modulePermissions) => {
     const moduleIds = modulePermissions.map((p) => p.id);
     const isAllSelected = moduleIds.every((id) => checkedPermissionIds.includes(id));
@@ -88,7 +122,7 @@ const RoleManagement = () => {
     }
   };
 
-  // 6. Mở modal xác nhận cập nhật phân quyền
+  // Mở modal xác nhận cập nhật phân quyền
   const handleFormSubmit = (e) => {
     e.preventDefault();
     if (!selectedRole) return;
@@ -102,15 +136,25 @@ const RoleManagement = () => {
     });
   };
 
-  // 7. Thực thi lưu dữ liệu qua Store sau khi bấm xác nhận trên Modal
+  // ── 6. THỰC THI LƯU DỮ LIỆU QUA STORE MỚI ──
   const executeSavePermissions = async () => {
     try {
-      const res = await updatePermissionsForRole(selectedRole.id, confirmModal.pendingData);
+      // Chuẩn bị payload chuẩn DTO để cập nhật thông tin vai trò kèm mảng ID quyền mới
+      const updatePayload = {
+        id: selectedRole.id,
+        name: selectedRole.name,
+        description: selectedRole.description,
+        permissionIds: confirmModal.pendingData // Đẩy mảng phân quyền mới lên
+      };
+
+      const res = await updateRole(updatePayload);
       closeConfirmModal();
       
       if (res && res.success) {
-        showToast(`Cập nhật quyền vai trò [${selectedRole.name}] thành công!`, "success");
+        showToast(`Cập nhật ma trận quyền vai trò [${selectedRole.name}] thành công!`, "success");
         setSelectedRole((prev) => ({ ...prev, permissionIds: confirmModal.pendingData }));
+      } else {
+        showToast(res.message || "Không thể cập nhật phân quyền.", "error");
       }
     } catch (err) {
       showToast("Đã xảy ra lỗi hệ thống khi cập nhật quyền.", "error");
@@ -127,8 +171,8 @@ const RoleManagement = () => {
     setConfirmModal({ isOpen: false, type: "", title: "", message: "", pendingData: null });
   };
 
-  // Trạng thái Loading ban đầu giống hệt trang CategoryManagement
-  if (loading && roles.length === 0) {
+  // Trạng thái Loading ban đầu khi chưa có dữ liệu vai trò nào
+  if (isLoadingCombined && roles.length === 0) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
         <Loading size="large" />
@@ -139,7 +183,7 @@ const RoleManagement = () => {
   return (
     <div className="p-6 space-y-6 bg-gray-50 min-h-screen">
       
-      {/* BREADCRUMB & TIÊU ĐỀ TRANG (Đồng bộ chuẩn phong cách) */}
+      {/* BREADCRUMB & TIÊU ĐỀ TRANG */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
@@ -157,23 +201,23 @@ const RoleManagement = () => {
           onClick={() => { fetchRoles(); fetchPermissions(); }}
           className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 text-xs font-bold text-gray-600 rounded-xl hover:bg-gray-50 transition-all shadow-sm active:scale-95"
         >
-          <RefreshCw size={14} className={`${loading ? 'animate-spin' : ''}`} /> 
+          <RefreshCw size={14} className={`${isLoadingCombined ? 'animate-spin' : ''}`} /> 
           Làm mới dữ liệu
         </button>
       </div>
 
-      {/* Thông báo lỗi tập trung từ Store */}
-      {error && (
+      {/* Thông báo lỗi tập trung từ cả 2 Store */}
+      {combinedError && (
         <div className="p-3 bg-red-50 border border-red-100 text-red-500 rounded-xl text-xs font-bold flex items-center gap-2 max-w-7xl">
           <AlertCircle size={14} className="flex-shrink-0" />
-          <span>{error}</span>
+          <span>{combinedError}</span>
         </div>
       )}
 
-      {/* THÂN CHÍNH: BỐ CỤC LƯỚI ĐỒNG BỘ CHUẨN */}
+      {/* THÂN CHÍNH */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         
-        {/* CỘT TRÁI: DANH SÁCH VAI TRÒ (Thay thế khung Form cũ thành danh sách chọn) */}
+        {/* CỘT TRÁI: DANH SÁCH VAI TRÒ */}
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 lg:sticky lg:top-6">
           <div className="flex items-center gap-2 text-base font-black text-slate-800 border-b border-gray-100 pb-3 mb-4 uppercase tracking-wide">
             <Shield size={18} className="text-orange-500" />
@@ -218,7 +262,7 @@ const RoleManagement = () => {
           </div>
         </div>
 
-        {/* CỘT PHẢI: CHI TIẾT MA TRẬN PHÂN QUYỀN (Bọc trong container bảng trắng lớn) */}
+        {/* CỘT PHẢI: CHI TIẾT MA TRẬN PHÂN QUYỀN */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden lg:col-span-2 flex flex-col justify-between min-h-[500px]">
           
           {/* THANH ĐẦU KHUNG CHI TIẾT */}
@@ -262,7 +306,7 @@ const RoleManagement = () => {
                 return (
                   <div key={moduleName} className="border border-gray-100 rounded-xl overflow-hidden shadow-xs bg-white">
                     
-                    {/* TIÊU ĐỀ PHÂN HỆ (MODULE HEADER) */}
+                    {/* TIÊU ĐỀ PHÂN HỆ */}
                     <div className="bg-gray-50/60 px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
                       <span className="text-xs font-black text-slate-700 tracking-wide uppercase">
                         📦 PHÂN HỆ: {moduleName}

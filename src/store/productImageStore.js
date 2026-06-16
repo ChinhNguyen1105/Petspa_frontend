@@ -2,47 +2,69 @@ import { create } from "zustand";
 import ProductImageService from "../services/ProductImageService";
 
 export const useProductImageStore =
-  create((set) => ({
+  create((set, get) => ({
     images: [],
     loading: false,
     error: null,
 
-     fetchImages: async (
-          productId
-     ) => {
-        
-          try {
-            set({
-              loading: true,
-              error: null,
-            });
-    
-            const res =
-              await ProductImageService.getProductImages(
-                productId
-              );
-              console.log("image product from store", res);
-            set({
-              images:
-                res?.data || [],
-            });
-    
-            return res;
-          } catch (err) {
-            set({
-              error:
-                err?.response?.data
-                  ?.message ||
-                "Fetch images failed",
-            });
-          } finally {
-            set({
-              loading: false,
-            });
-          }
-        },
-    
+    /*
+    |--------------------------------------------------------------------------
+    | FETCH IMAGES
+    |--------------------------------------------------------------------------
+    */
+    fetchImages: async (
+      productId
+    ) => {
+      try {
+        set({
+          loading: true,
+          error: null,
+        });
 
+        const res =
+          await ProductImageService.getProductImages(
+            productId
+          );
+
+        console.log(
+          "response img",
+          res
+        );
+
+        set({
+          images:
+            res?.data || [],
+        });
+
+        return res;
+      } catch (err) {
+        console.error(
+          "Fetch images error:",
+          err
+        );
+
+        set({
+          images: [],
+          error:
+            err?.response?.data
+              ?.message ||
+            err?.message ||
+            "Fetch images failed",
+        });
+
+        throw err;
+      } finally {
+        set({
+          loading: false,
+        });
+      }
+    },
+
+    /*
+    |--------------------------------------------------------------------------
+    | UPLOAD IMAGES
+    |--------------------------------------------------------------------------
+    */
     uploadImages: async (
       productId,
       files
@@ -59,12 +81,23 @@ export const useProductImageStore =
             files
           );
 
+        // refresh lại ảnh
+        await get().fetchImages(
+          productId
+        );
+
         return res;
       } catch (err) {
+        console.error(
+          "Upload image error:",
+          err
+        );
+
         set({
           error:
             err?.response?.data
               ?.message ||
+            err?.message ||
             "Upload images failed",
         });
 
@@ -76,6 +109,11 @@ export const useProductImageStore =
       }
     },
 
+    /*
+    |--------------------------------------------------------------------------
+    | DELETE IMAGE
+    |--------------------------------------------------------------------------
+    */
     deleteImage: async (
       imageId
     ) => {
@@ -95,10 +133,20 @@ export const useProductImageStore =
 
         return res;
       } catch (err) {
+        console.error(
+          "Delete image error:",
+          err
+        );
+
         throw err;
       }
     },
 
+    /*
+    |--------------------------------------------------------------------------
+    | SET THUMBNAIL
+    |--------------------------------------------------------------------------
+    */
     setMainImage: async (
       productId,
       imageId
@@ -115,20 +163,50 @@ export const useProductImageStore =
             state.images.map(
               (img) => ({
                 ...img,
+
                 isMain:
-                  img.id === imageId,
+                  img.id ===
+                  imageId,
+
+                isThumbnail:
+                  img.id ===
+                  imageId,
               })
             ),
         }));
 
         return res;
       } catch (err) {
+        console.error(
+          "Set thumbnail error:",
+          err
+        );
+
         throw err;
       }
+    },
+
+    /*
+    |--------------------------------------------------------------------------
+    | HELPERS
+    |--------------------------------------------------------------------------
+    */
+    getMainImage: () => {
+      const images =
+        get().images;
+
+      return (
+        images.find(
+          (img) =>
+            img.isThumbnail ||
+            img.isMain
+        ) || null
+      );
     },
 
     clearImages: () =>
       set({
         images: [],
+        error: null,
       }),
   }));

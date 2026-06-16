@@ -1,95 +1,253 @@
 import { create } from "zustand";
-import RoleService from "../services/RoleService"; // Đồng bộ chuẩn xác theo file service đã import
+import RoleService from "../services/RoleService";
 
-export const useRolePermissionStore = create((set, get) => ({
-  /*
-  |--------------------------------------------------------------------------
-  | STATE
-  |--------------------------------------------------------------------------
-  */
-  roles: [],
-  permissions: [],
-  permissionsByModule: {}, // Quyền hạn được nhóm sẵn theo từng phân hệ (PRODUCTS, INVENTORY...)
-  loading: false,
-  error: null,
+export const useRoleStore = create(
+  (set, get) => ({
+    // ───────────────────────── STATE ─────────────────────────
 
-  /*
-  |--------------------------------------------------------------------------
-  | PERMISSION ACTIONS
-  |--------------------------------------------------------------------------
-  */
-  // Tải danh sách tất cả các quyền hạn trong hệ thống
-  fetchPermissions: async () => {
-    set({ loading: true, error: null });
-    try {
-      // ĐÃ SỬA: Thay AuthService bằng RoleService theo đúng biến import ở đầu file
-      const res = await RoleService.PermissionService.getAllPermissions();
-      const list = res?.data?.data || [];
-      
-      // Tự động gom nhóm các quyền theo thuộc tính 'module' phục vụ UI hiển thị dạng Checkbox/Bảng
-      const grouped = list.reduce((acc, curr) => {
-        const mod = curr.module || "OTHERS";
-        if (!acc[mod]) acc[mod] = [];
-        acc[mod].push(curr);
-        return acc;
-      }, {});
+    roles: [],
+    selectedRole: null,
 
-      set({ 
-        permissions: list, 
-        permissionsByModule: grouped, 
-        loading: false 
-      });
-    } catch (err) {
-      set({ loading: false, error: err?.message || "Không thể tải danh sách quyền" });
-    }
-  },
+    metaRoles: null,
 
-  /*
-  |--------------------------------------------------------------------------
-  | ROLE ACTIONS
-  |--------------------------------------------------------------------------
-  */
-  // Tải danh sách toàn bộ các Vai trò
-  fetchRoles: async () => {
-    set({ loading: true, error: null });
-    try {
-      // ĐÃ SỬA: Thay AuthService bằng RoleService theo đúng biến import ở đầu file
-      const res = await RoleService.RoleService.getAllRoles();
-      set({ roles: res?.data?.data || [], loading: false });
-    } catch (err) {
-      set({ loading: false, error: err?.message || "Không thể tải danh sách vai trò" });
-    }
-  },
+    loading: false,
+    submitting: false,
+    error: null,
 
-  // Cập nhật mảng ID quyền lợi cho một Vai trò cụ thể
-  updatePermissionsForRole: async (roleId, permissionIds) => {
-    set({ loading: true, error: null });
-    try {
-      // ĐÃ SỬA: Thay AuthService bằng RoleService theo đúng biến import ở đầu file
-      await RoleService.RoleService.updateRolePermissions(roleId, permissionIds);
-      
-      // Đồng bộ trực tiếp mảng roles tại Client State để giao diện Admin render lại ngay lập tức
-      set((state) => ({
-        loading: false,
-        roles: state.roles.map((role) =>
-          role.id === roleId ? { ...role, permissionIds } : role
-        ),
-      }));
-      return { success: true };
-    } catch (err) {
-      set({ loading: false, error: err?.message || "Cập nhật quyền thất bại" });
-      return { success: false, error: err?.message };
-    }
-  },
+    keyword: "",
 
-  /*
-  |--------------------------------------------------------------------------
-  | UTILITY HELPERS
-  |--------------------------------------------------------------------------
-  */
-  // Hàm bổ trợ lấy nhanh danh sách ID quyền của một Role theo tên (ví dụ: 'STAFF')
-  getPermissionIdsByRoleName: (roleName) => {
-    const role = get().roles.find(r => r.name?.toUpperCase() === roleName?.toUpperCase());
-    return role ? role.permissionIds : [];
-  }
-}));
+    // ───────────────────────── FILTERS ─────────────────────────
+
+    setKeyword: (keyword) =>
+      set({ keyword }),
+
+    // ───────────────────────── GET ALL ─────────────────────────
+
+    fetchRoles: async (
+      overrideParams = {}
+    ) => {
+      try {
+        set({
+          loading: true,
+          error: null,
+        });
+
+        const state = get();
+
+        const params = {
+          keyword:
+            state.keyword ||
+            undefined,
+
+          ...overrideParams,
+        };
+
+        const res =
+          await RoleService.getRoles(
+            params
+          );
+
+        set({
+          roles:
+            res?.result || [],
+
+          metaRoles:
+            res?.meta || null,
+        });
+      } catch (err) {
+        console.error(
+          "Fetch roles error:",
+          err
+        );
+
+        set({
+          roles: [],
+          metaRoles: null,
+          error:
+            err?.response?.data
+              ?.message ||
+            err?.message,
+        });
+      } finally {
+        set({
+          loading: false,
+        });
+      }
+    },
+
+    // ───────────────────────── DETAIL ─────────────────────────
+
+    fetchRoleById: async (
+      id
+    ) => {
+      try {
+        set({
+          loading: true,
+          error: null,
+        });
+
+        const res =
+          await RoleService.getRoleById(
+            id
+          );
+
+        set({
+          selectedRole: res,
+        });
+
+        return res;
+      } catch (err) {
+        console.error(
+          "Fetch role detail error:",
+          err
+        );
+
+        set({
+          error:
+            err?.response?.data
+              ?.message ||
+            err?.message,
+        });
+
+        return null;
+      } finally {
+        set({
+          loading: false,
+        });
+      }
+    },
+
+    // ───────────────────────── CREATE ─────────────────────────
+
+    createRole: async (
+      request
+    ) => {
+      try {
+        set({
+          submitting: true,
+          error: null,
+        });
+
+        const res =
+          await RoleService.createRole(
+            request
+          );
+
+        await get().fetchRoles();
+
+        return {
+          success: true,
+          data: res,
+        };
+      } catch (err) {
+        console.error(
+          "Create role error:",
+          err
+        );
+
+        return {
+          success: false,
+          message:
+            err?.response?.data
+              ?.message ||
+            err?.message,
+        };
+      } finally {
+        set({
+          submitting: false,
+        });
+      }
+    },
+
+    // ───────────────────────── UPDATE ─────────────────────────
+
+    updateRole: async (
+      request
+    ) => {
+      try {
+        set({
+          submitting: true,
+          error: null,
+        });
+
+        const res =
+          await RoleService.updateRole(
+            request
+          );
+
+        await get().fetchRoles();
+
+        return {
+          success: true,
+          data: res,
+        };
+      } catch (err) {
+        console.error(
+          "Update role error:",
+          err
+        );
+
+        return {
+          success: false,
+          message:
+            err?.response?.data
+              ?.message ||
+            err?.message,
+        };
+      } finally {
+        set({
+          submitting: false,
+        });
+      }
+    },
+
+    // ───────────────────────── DELETE ─────────────────────────
+
+    deleteRole: async (
+      id
+    ) => {
+      try {
+        set({
+          submitting: true,
+          error: null,
+        });
+
+        const res =
+          await RoleService.deleteRole(
+            id
+          );
+
+        await get().fetchRoles();
+
+        return {
+          success: true,
+          data: res,
+        };
+      } catch (err) {
+        console.error(
+          "Delete role error:",
+          err
+        );
+
+        return {
+          success: false,
+          message:
+            err?.response?.data
+              ?.message ||
+            err?.message,
+        };
+      } finally {
+        set({
+          submitting: false,
+        });
+      }
+    },
+
+    resetRoleState: () =>
+      set({
+        selectedRole: null,
+        keyword: "",
+        error: null,
+      }),
+  })
+);

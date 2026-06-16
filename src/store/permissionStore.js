@@ -1,57 +1,251 @@
-import { create } from 'zustand';
-import PermissionService from '../services/PermissionService';
+import { create } from "zustand";
+import PermissionService from "../services/PermissionService";
 
-export const usePermissionStore = create((set, get) => ({
-  // ─── STATES ───────────────────────────────────────────────────────────────
-  permissions: [],               // Mảng phẳng chứa toàn bộ quyền hạn
-  permissionsByModule: {},       // Object nhóm quyền theo module (vd: { PRODUCTS: [...], SERVICES: [...] })
-  isLoading: false,
-  error: null,
+export const usePermissionStore =
+  create((set, get) => ({
+    // ───────────────────────── STATE ─────────────────────────
 
-  // ─── ACTIONS ──────────────────────────────────────────────────────────────
-  
-  /**
-   * Tải danh sách quyền hạn hệ thống từ Service và tiến hành phân nhóm dữ liệu
-   */
-  fetchPermissions: async () => {
-    // Tối ưu hóa: Nếu đã tải dữ liệu trước đó rồi thì không cần gọi lại API giả lập
-    if (get().permissions.length > 0) return;
+    permissions: [],
+    selectedPermission: null,
 
-    set({ isLoading: true, error: null });
-    try {
-      const res = await PermissionService.getPermissions();
+    metaPermissions: null,
 
-      if (res && res.success) {
-        const rawPermissions = res.data || [];
-        
-        // Tiến hành gom nhóm quyền hạn theo cụm chức năng (Module) để phục vụ UI phân chia tab/bảng
-        const grouped = rawPermissions.reduce((acc, curr) => {
-          const moduleName = curr.module || 'OTHERS';
-          if (!acc[moduleName]) {
-            acc[moduleName] = [];
-          }
-          acc[moduleName].push(curr);
-          return acc;
-        }, {});
+    loading: false,
+    submitting: false,
+    error: null,
 
-        set({ 
-          permissions: rawPermissions,
-          permissionsByModule: grouped,
-          isLoading: false 
+    keyword: "",
+
+    // ───────────────────────── FILTERS ─────────────────────────
+
+    setKeyword: (keyword) =>
+      set({ keyword }),
+
+    // ───────────────────────── GET ALL ─────────────────────────
+
+    fetchPermissions: async (
+      overrideParams = {}
+    ) => {
+      try {
+        set({
+          loading: true,
+          error: null,
         });
-      } else {
-        set({ permissions: [], permissionsByModule: {}, isLoading: false, error: res.message });
-      }
-    } catch (err) {
-      console.error("Lỗi khi tải danh sách quyền hệ thống:", err);
-      set({ isLoading: false, error: err.message || "Lỗi bất định khi tải quyền hạn" });
-    }
-  },
 
-  /**
-   * Hàm hỗ trợ lấy nhanh danh sách quyền hạn thuộc về một module cụ thể
-   */
-  getPermissionsByModule: (moduleName) => {
-    return get().permissionsByModule[moduleName] || [];
-  }
-}));
+        const state = get();
+
+        const params = {
+          keyword:
+            state.keyword ||
+            undefined,
+
+          ...overrideParams,
+        };
+
+        const res =
+          await PermissionService.getPermissions(
+            params
+          );
+
+        set({
+          permissions:
+            res?.result || [],
+
+          metaPermissions:
+            res?.meta || null,
+        });
+      } catch (err) {
+        console.error(
+          "Fetch permissions error:",
+          err
+        );
+
+        set({
+          permissions: [],
+          metaPermissions: null,
+          error:
+            err?.response?.data
+              ?.message ||
+            err?.message,
+        });
+      } finally {
+        set({
+          loading: false,
+        });
+      }
+    },
+
+    // ───────────────────────── DETAIL ─────────────────────────
+
+    fetchPermissionById:
+      async (id) => {
+        try {
+          set({
+            loading: true,
+            error: null,
+          });
+
+          const res =
+            await PermissionService.getPermissionById(
+              id
+            );
+
+          set({
+            selectedPermission:
+              res,
+          });
+
+          return res;
+        } catch (err) {
+          console.error(
+            "Fetch permission detail error:",
+            err
+          );
+
+          set({
+            error:
+              err?.response?.data
+                ?.message ||
+              err?.message,
+          });
+
+          return null;
+        } finally {
+          set({
+            loading: false,
+          });
+        }
+      },
+
+    // ───────────────────────── CREATE ─────────────────────────
+
+    createPermission:
+      async (request) => {
+        try {
+          set({
+            submitting: true,
+            error: null,
+          });
+
+          const res =
+            await PermissionService.createPermission(
+              request
+            );
+
+          await get().fetchPermissions();
+
+          return {
+            success: true,
+            data: res,
+          };
+        } catch (err) {
+          console.error(
+            "Create permission error:",
+            err
+          );
+
+          return {
+            success: false,
+            message:
+              err?.response?.data
+                ?.message ||
+              err?.message,
+          };
+        } finally {
+          set({
+            submitting: false,
+          });
+        }
+      },
+
+    // ───────────────────────── UPDATE ─────────────────────────
+
+    updatePermission:
+      async (request) => {
+        try {
+          set({
+            submitting: true,
+            error: null,
+          });
+
+          const res =
+            await PermissionService.updatePermission(
+              request
+            );
+
+          await get().fetchPermissions();
+
+          return {
+            success: true,
+            data: res,
+          };
+        } catch (err) {
+          console.error(
+            "Update permission error:",
+            err
+          );
+
+          return {
+            success: false,
+            message:
+              err?.response?.data
+                ?.message ||
+              err?.message,
+          };
+        } finally {
+          set({
+            submitting: false,
+          });
+        }
+      },
+
+    // ───────────────────────── DELETE ─────────────────────────
+
+    deletePermission:
+      async (id) => {
+        try {
+          set({
+            submitting: true,
+            error: null,
+          });
+
+          const res =
+            await PermissionService.deletePermission(
+              id
+            );
+
+          await get().fetchPermissions();
+
+          return {
+            success: true,
+            data: res,
+          };
+        } catch (err) {
+          console.error(
+            "Delete permission error:",
+            err
+          );
+
+          return {
+            success: false,
+            message:
+              err?.response?.data
+                ?.message ||
+              err?.message,
+          };
+        } finally {
+          set({
+            submitting: false,
+          });
+        }
+      },
+
+    resetPermissionState:
+      () =>
+        set({
+          selectedPermission:
+            null,
+          keyword: "",
+          error: null,
+        }),
+  }));

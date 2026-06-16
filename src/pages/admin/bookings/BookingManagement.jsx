@@ -20,7 +20,7 @@ import { useBookingStore } from '../../../store/bookingStore';
 
 import BookingFormAdmin from '../../../components/form/BookingFormAdmin';
 import Pagination from '../../../components/common/Pagination';
-import { STATUS_FILTERS } from '../../../constants';
+import { BOOKING_STATUS_LIST } from '../../../constants';
 
 const BookingManagement = () => {
   // --- TẬN DỤNG TRẠNG THÁI VÀ ACTIONS TỪ ZUSTAND STORE ---
@@ -52,7 +52,7 @@ const BookingManagement = () => {
   });
 
   const showToast = useCartStore((state) => state.showToast);
-  const statusFilters = STATUS_FILTERS;
+  const statusFilters = BOOKING_STATUS_LIST;
 
   // ─── FETCH KHI THAY ĐỔI TRANG ─────────────────────────────────────────────
   useEffect(() => {

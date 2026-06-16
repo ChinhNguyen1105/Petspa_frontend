@@ -45,11 +45,9 @@ export const useCategoryStore = create((set, get) => ({
         type: state.selectedType || undefined,
         ...overrideParams,
       };
-
+      
       const res = await CategoryService.getCategories(params);
-
-      console.log("categories from store:", res);
-
+      console.log("fetch categories", res);
       if (res?.success) {
         const categories = res.data?.result || [];
 

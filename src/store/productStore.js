@@ -162,101 +162,157 @@ export const useProductStore = create((set, get) => ({
   },
 
   // ───────────────── CREATE ─────────────────
-  createProduct: async (data) => {
-    try {
-      set({ loading: true });
+ createProduct: async (data) => {
+  console.log(
+    "create product payload",
+    data
+  );
 
-      const res =
-        await ProductService.createProduct(
-          data
-        );
+  try {
+    set({ loading: true });
 
-      if (
-        res?.success &&
-        res?.data
-      ) {
-        set((state) => ({
-          products: [
-            res.data,
-            ...state.products,
-          ],
-        }));
-      }
+    const request = {
+      name: data.name,
+      description:
+        data.description,
 
-      return res;
-    } catch (err) {
-      console.error(
-        "Lỗi khi tạo sản phẩm:",
-        err
+      price: Number(data.price),
+
+      categoryId: Number(
+        data.categoryId
+      ),
+
+      // backend yêu cầu quantity
+      quantity: Number(
+        data.stockQuantity ??
+        data.stock_quantity ??
+        0
+      ),
+    };
+
+    console.log(
+      "request backend =",
+      request
+    );
+
+    const res =
+      await ProductService.createProduct(
+        request
       );
 
-      return {
-        success: false,
-        message:
-          "Lỗi hệ thống không thể tạo sản phẩm.",
-      };
-    } finally {
-      set({ loading: false });
+    if (
+      res?.success &&
+      res?.data
+    ) {
+      set((state) => ({
+        products: [
+          res.data,
+          ...state.products,
+        ],
+      }));
     }
-  },
+
+    return res;
+  } catch (err) {
+    console.error(
+      "Lỗi khi tạo sản phẩm:",
+      err
+    );
+
+    return {
+      success: false,
+      message:
+        "Lỗi hệ thống không thể tạo sản phẩm.",
+    };
+  } finally {
+    set({ loading: false });
+  }
+},
 
   // ───────────────── UPDATE ─────────────────
   updateProduct: async (
-    id,
-    data
-  ) => {
-    try {
-      set({ loading: true });
+  id,
+  data
+) => {
+  try {
+    set({ loading: true });
 
-      const res =
-        await ProductService.updateProduct(
-          id,
-          data
-        );
+    const request = {
+      id: Number(id),
 
-      if (
-        res?.success &&
-        res?.data
-      ) {
-        set((state) => ({
-          products:
-            state.products.map((p) =>
-              p.id === Number(id)
-                ? {
-                    ...p,
-                    ...res.data,
-                  }
-                : p
-            ),
+      name: data.name,
+      description:
+        data.description,
 
-          currentProduct:
-            state.currentProduct?.id ===
-            Number(id)
-              ? {
-                  ...state.currentProduct,
-                  ...res.data,
-                }
-              : state.currentProduct,
-        }));
-      }
+      price: Number(data.price),
 
-      return res;
-    } catch (err) {
-      console.error(
-        `Lỗi khi cập nhật sản phẩm ID ${id}:`,
-        err
+      categoryId: Number(
+        data.categoryId ??
+        data.category
+      ),
+
+      quantity: Number(
+        data.stockQuantity ??
+        data.stock_quantity ??
+        0
+      ),
+    };
+
+    console.log(
+      "update request = ",
+      request
+    );
+
+    const res =
+      await ProductService.updateProduct(
+        id,
+        request
       );
 
-      return {
-        success: false,
-        message:
-          "Lỗi hệ thống không thể cập nhật sản phẩm.",
-      };
-    } finally {
-      set({ loading: false });
-    }
-  },
+    if (
+      res?.success &&
+      res?.data
+    ) {
+      set((state) => ({
+        products:
+          state.products.map((p) =>
+            p.id === Number(id)
+              ? {
+                  ...p,
+                  ...res.data,
+                }
+              : p
+          ),
 
+        currentProduct:
+          state.currentProduct?.id ===
+          Number(id)
+            ? {
+                ...state.currentProduct,
+                ...res.data,
+              }
+            : state.currentProduct,
+      }));
+    }
+
+    return res;
+  } catch (err) {
+    console.error(
+      `Lỗi khi cập nhật sản phẩm ID ${id}:`,
+      err
+    );
+
+    return {
+      success: false,
+      message:
+        "Lỗi hệ thống không thể cập nhật sản phẩm.",
+    };
+  } finally {
+    set({ loading: false });
+  }
+},
+ 
+ 
   // ───────────────── DELETE ─────────────────
   deleteProduct: async (id) => {
     try {

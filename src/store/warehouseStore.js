@@ -3,6 +3,7 @@ import WarehouseService from "../services/WarehouseService";
 
 export const useWarehouseStore = create((set, get) => ({
   // ───────────────────────── STATES ─────────────────────────
+
   inventory: [],
   transactions: [],
 
@@ -11,8 +12,10 @@ export const useWarehouseStore = create((set, get) => ({
 
   loading: false,
   submitting: false,
+  error: null,
 
   // ───────────────────────── FILTERS ─────────────────────────
+
   inventoryKeyword: "",
   transactionKeyword: "",
 
@@ -61,31 +64,40 @@ export const useWarehouseStore = create((set, get) => ({
     overrideParams = {}
   ) => {
     try {
-      set({ loading: true });
+      set({
+        loading: true,
+        error: null,
+      });
 
       const state = get();
 
       const params = {
-        keyword: state.inventoryKeyword,
+        keyword:
+          state.inventoryKeyword ||
+          undefined,
 
         productId:
-          state.productId || null,
+          state.productId ||
+          undefined,
 
         minQuantity:
-          state.minQuantity || null,
+          state.minQuantity ||
+          undefined,
 
         maxQuantity:
-          state.maxQuantity || null,
+          state.maxQuantity ||
+          undefined,
 
         ...overrideParams,
       };
-
       const res =
         await WarehouseService.getInventory(
           params
         );
 
-      if (res?.success) {
+      if (
+        res?.status === "SUCCESS"
+      ) {
         set({
           inventory:
             res.data?.result || [],
@@ -104,8 +116,19 @@ export const useWarehouseStore = create((set, get) => ({
         "Lỗi khi lấy inventory:",
         err
       );
+
+      set({
+        inventory: [],
+        metaInventory: null,
+        error:
+          err?.response?.data
+            ?.message ||
+          err?.message,
+      });
     } finally {
-      set({ loading: false });
+      set({
+        loading: false,
+      });
     }
   },
 
@@ -115,20 +138,24 @@ export const useWarehouseStore = create((set, get) => ({
     overrideParams = {}
   ) => {
     try {
-      set({ loading: true });
-
+      set({
+        loading: true,
+        error: null,
+      });
       const state = get();
 
       const params = {
         keyword:
-          state.transactionKeyword,
+          state.transactionKeyword ||
+          undefined,
 
         type:
           state.transactionType ||
-          null,
+          undefined,
 
         productId:
-          state.productId || null,
+          state.productId ||
+          undefined,
 
         ...overrideParams,
       };
@@ -138,7 +165,9 @@ export const useWarehouseStore = create((set, get) => ({
           params
         );
 
-      if (res?.success) {
+      if (
+        res?.status === "SUCCESS"
+      ) {
         set({
           transactions:
             res.data?.result || [],
@@ -157,65 +186,250 @@ export const useWarehouseStore = create((set, get) => ({
         "Lỗi khi lấy transactions:",
         err
       );
+
+      set({
+        transactions: [],
+        metaTransactions: null,
+        error:
+          err?.response?.data
+            ?.message ||
+          err?.message,
+      });
     } finally {
-      set({ loading: false });
+      set({
+        loading: false,
+      });
     }
   },
 
-  // ───────────────────────── CREATE TRANSACTION ─────────────────────────
+  // ───────────────────────── IMPORT PRODUCT ─────────────────────────
 
-  handleStockTransaction: async (
-    payload
+  importProduct: async (
+    request
   ) => {
     try {
-      set({ submitting: true });
+      set({
+        loading: true,
+        error: null,
+      });
 
       const res =
-        await WarehouseService.createTransaction(
-          payload
+        await WarehouseService.importProduct(
+          request
         );
 
-      if (res?.success) {
-        set((state) => ({
-          transactions: [
-            res.data,
-            ...state.transactions,
-          ],
-
-          metaTransactions:
-            state.metaTransactions
-              ? {
-                  ...state.metaTransactions,
-                  total:
-                    state
-                      .metaTransactions
-                      .total + 1,
-                }
-              : null,
-        }));
-
-        // refresh inventory
+      if (
+        res?.status === "SUCCESS"
+      ) {
         await get().fetchInventory();
-      }
+        await get().fetchTransactions();
 
-      return res;
-    } catch (err) {
-      console.error(
-        "Lỗi transaction kho:",
-        err
-      );
+        return {
+          success: true,
+          data: res.data,
+        };
+      }
 
       return {
         success: false,
         message:
-          "Đã xảy ra lỗi hệ thống!",
+          "Import product failed",
+      };
+    } catch (err) {
+      console.error(
+        "Import product error:",
+        err
+      );
+
+      set({
+        error:
+          err?.response?.data
+            ?.message ||
+          err?.message,
+      });
+
+      return {
+        success: false,
+        message:
+          err?.response?.data
+            ?.message ||
+          err?.message,
       };
     } finally {
-      set({ submitting: false });
+      set({
+        loading: false,
+      });
     }
   },
 
-  // ───────────────────────── RESET FILTERS ─────────────────────────
+  // ───────────────────────── EXPORT PRODUCT ─────────────────────────
+
+  exportProduct: async (
+    request
+  ) => {
+    try {
+      set({
+        loading: true,
+        error: null,
+      });
+
+      const res =
+        await WarehouseService.exportProduct(
+          request
+        );
+
+      if (
+        res?.status === "SUCCESS"
+      ) {
+        await get().fetchInventory();
+        await get().fetchTransactions();
+
+        return {
+          success: true,
+          data: res.data,
+        };
+      }
+
+      return {
+        success: false,
+        message:
+          "Export product failed",
+      };
+    } catch (err) {
+      console.error(
+        "Export product error:",
+        err
+      );
+
+      set({
+        error:
+          err?.response?.data
+            ?.message ||
+          err?.message,
+      });
+
+      return {
+        success: false,
+        message:
+          err?.response?.data
+            ?.message ||
+          err?.message,
+      };
+    } finally {
+      set({
+        loading: false,
+      });
+    }
+  },
+
+  // ───────────────────────── ADJUST PRODUCT ─────────────────────────
+
+  adjustProduct: async (
+    request
+  ) => {
+    try {
+      set({
+        loading: true,
+        error: null,
+      });
+      
+      const payload = {
+        productId: request.productId,
+        newQuantity: request.quantity,
+        note: request.note,
+      }
+
+    const res =
+      await WarehouseService.adjustProduct(
+        payload
+      );
+
+      if (
+        res?.status === "SUCCESS"
+      ) {
+        await get().fetchInventory();
+        await get().fetchTransactions();
+
+        return {
+          success: true,
+          data: res.data,
+        };
+      }
+
+      return {
+        success: false,
+        message:
+          "Adjust product failed",
+      };
+    } catch (err) {
+      console.error(
+        "Adjust product error:",
+        err
+      );
+
+      set({
+        error:
+          err?.response?.data
+            ?.message ||
+          err?.message,
+      });
+
+      return {
+        success: false,
+        message:
+          err?.response?.data
+            ?.message ||
+          err?.message,
+      };
+    } finally {
+      set({
+        loading: false,
+      });
+    }
+  },
+
+  // ───────────────────────── OLD TRANSACTION API ─────────────────────────
+
+  handleStockTransaction:
+    async (payload) => {
+      try {
+        set({
+          submitting: true,
+        });
+
+        const res =
+          await WarehouseService.createTransaction(
+            payload
+          );
+
+        if (
+          res?.status ===
+          "SUCCESS"
+        ) {
+          await get().fetchInventory();
+          await get().fetchTransactions();
+        }
+
+        return res;
+      } catch (err) {
+        console.error(
+          "Lỗi transaction kho:",
+          err
+        );
+
+        return {
+          success: false,
+          message:
+            "Đã xảy ra lỗi hệ thống!",
+        };
+      } finally {
+        set({
+          submitting: false,
+        });
+      }
+    },
+
+  // ───────────────────────── RESET ─────────────────────────
 
   resetFilters: () =>
     set({

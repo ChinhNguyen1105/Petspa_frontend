@@ -7,6 +7,7 @@ import Pagination from '../../components/common/Pagination';
 
 import { useProductStore } from '../../store/productStore';
 import { useCategoryStore } from '../../store/categoryStore';
+import { useProductImageStore } from '../../store/productImageStore';
 
 const ProductList = () => {
   // 1. Quản lý trạng thái và bộ lọc từ Product Store (Giữ nguyên Store)
@@ -33,7 +34,9 @@ const ProductList = () => {
 
   // Xác định kích thước trang (Ưu tiên meta từ backend, không thì dùng cấu hình store, mặc định là 12)
   const currentSize = meta?.size || pageSize || 12;
-
+const filteredCategories = Array.isArray(categories) 
+  ? categories.filter(cat => cat && cat.categoryType === "PRODUCT") 
+    : [];
   // Mount: Chỉ fetch danh mục loại PRODUCT 1 lần duy nhất
   useEffect(() => {
     fetchCategories({ type: 'PRODUCT' });
@@ -112,8 +115,8 @@ const ProductList = () => {
               Tất Cả Sản Phẩm
             </button>
 
-            {Array.isArray(categories) &&
-              categories.map((cat, index) => {
+            {Array.isArray(filteredCategories) &&
+              filteredCategories.map((cat, index) => {
                 const categoryName = typeof cat === "string" ? cat : cat.name || cat.title;
                 const currentId = cat.id !== undefined ? cat.id : index;
                 if (!categoryName) return null;

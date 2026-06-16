@@ -1,6 +1,29 @@
 import api from "./api";
 import { URL_CONSTANT } from "../constants/urlConstant";
 
+/*
+|--------------------------------------------------------------------------
+| GET PRODUCT IMAGES
+|--------------------------------------------------------------------------
+*/
+const getProductImages = async (
+  productId
+) => {
+  const resp = await api.get(
+    URL_CONSTANT.ProductImages.GET_IMAGES.replace(
+      "{productId}",
+      productId
+    )
+  );
+
+  return resp.data;
+};
+
+/*
+|--------------------------------------------------------------------------
+| ADD IMAGES
+|--------------------------------------------------------------------------
+*/
 const addImages = async (
   productId,
   files
@@ -33,52 +56,49 @@ const addImages = async (
   return resp.data;
 };
 
+/*
+|--------------------------------------------------------------------------
+| DELETE IMAGE
+|--------------------------------------------------------------------------
+*/
 const deleteImage = async (
   imageId
 ) => {
-  const resp =
-    await api.delete(
-      URL_CONSTANT.ProductImages.DELETE_IMAGE.replace(
-        "{id}",
-        imageId
-      )
-    );
+  const resp = await api.delete(
+    URL_CONSTANT.ProductImages.DELETE_IMAGE.replace(
+      "{id}",
+      imageId
+    )
+  );
 
   return resp.data;
 };
 
+/*
+|--------------------------------------------------------------------------
+| SET THUMBNAIL IMAGE
+|--------------------------------------------------------------------------
+*/
 const setMainImage = async (
   productId,
   imageId
 ) => {
-  const resp =
-    await api.put(
-      URL_CONSTANT.ProductImages.SET_MAIN_IMAGE,
-      {
-        productId,
-        imageId,
-      }
-    );
+  const payload = {
+    productId,
+    imageId,
+  };
+
+  const resp = await api.put(
+    URL_CONSTANT.ProductImages.SET_MAIN_IMAGE,
+    payload
+  );
 
   return resp.data;
 };
 
-const getProductImages =
-  async (serviceId) => {
-    const resp =
-      await api.get(
-        URL_CONSTANT.ProductImages.GET_IMAGES.replace(
-          "{productId}",
-          serviceId
-        )
-      );
-
-    return resp.data;
-  };
-
 export default {
+  getProductImages,
   addImages,
   deleteImage,
-    setMainImage,
-    getProductImages
+  setMainImage,
 };

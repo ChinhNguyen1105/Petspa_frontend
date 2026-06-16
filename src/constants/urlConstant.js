@@ -13,6 +13,30 @@ export const URL_CONSTANT = {
     LOGOUT: '/auth/logout',
   },
 
+  Role: {
+  PREFIX: "/roles",
+
+  CREATE_ROLE: "/roles",
+  UPDATE_ROLE: "/roles",
+
+  GET_ALL_ROLES: "/roles",
+  GET_ROLE_BY_ID: "/roles/{id}",
+
+  DELETE_ROLE: "/roles/{id}",
+  },
+  
+  Permission: {
+  PREFIX: "/permissions",
+
+  CREATE_PERMISSION: "/permissions",
+  UPDATE_PERMISSION: "/permissions",
+
+  GET_ALL_PERMISSIONS: "/permissions",
+  GET_PERMISSION_BY_ID: "/permissions/{id}",
+
+  DELETE_PERMISSION: "/permissions/{id}",
+},
+
   User: {
     PREFIX: '/users',
     GET_USERS: '/users',

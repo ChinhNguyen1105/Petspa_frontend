@@ -24,7 +24,6 @@ export const useBookingStore = create((set, get) => ({
 
       const res = await BookingService.getBookings(params, options);
 
-      console.log("fetching bookings", res);
       set({
         bookings: res?.data?.result || [],
         meta: res?.data?.meta || null,

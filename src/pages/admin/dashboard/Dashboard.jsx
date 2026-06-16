@@ -270,7 +270,7 @@ const Dashboard = () => {
                       </td>
                       <td className="p-3">
                         {/* SỬA: customer?.full_name → userName */}
-                        <div className="font-medium text-gray-800">{order.userName}</div>
+                        <div className="font-medium text-gray-800">{order.shippingName}</div>
                       </td>
                       <td className="p-3 font-black text-gray-900">
                         {/* SỬA: total_amount → totalAmount */}

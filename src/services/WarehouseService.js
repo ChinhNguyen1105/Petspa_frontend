@@ -33,6 +33,7 @@ const getInventory = async (
   params = {},
   options = {}
 ) => {
+  console.log("params", params);
   if (shouldUseApi(options)) {
     const productId =
       params.productId || params.id;
@@ -43,6 +44,7 @@ const getInventory = async (
         productId
       )
     );
+    console.log("getInventory", resp);
 
     return resp.data;
   }
@@ -129,10 +131,9 @@ const getTransactions = async (
         params,
       }
     );
-
+    console.log("resp transaction :", resp);
     return resp.data;
   }
-
   await delay(500);
 
   let result = [
@@ -314,11 +315,83 @@ const createTransaction = async (
   };
 };
 
+const importProduct = async (
+  request,
+  options = {}
+) => {
+
+  if (shouldUseApi(options)) {
+    const resp = await api.post(
+      URL_CONSTANT.Inventory.IMPORT_PRODUCT,
+      request
+    );
+
+    return resp.data;
+  }
+
+  await delay(500);
+
+  return {
+    status: "SUCCESS",
+    data: {
+      ...request,
+    },
+  };
+};
+
+const exportProduct = async (
+  request,
+  options = {}
+) => {
+  if (shouldUseApi(options)) {
+    const resp = await api.post(
+      URL_CONSTANT.Inventory.EXPORT_PRODUCT,
+      request
+    );
+
+    return resp.data;
+  }
+
+  await delay(500);
+
+  return {
+    status: "SUCCESS",
+    data: {
+      ...request,
+    },
+  };
+};
+
+const adjustProduct = async (
+  request,
+  options = {}
+) => {
+  console.log("request: ", request);
+  if (shouldUseApi(options)) {
+    const resp = await api.post(
+      URL_CONSTANT.Inventory.ADJUST_PRODUCT,
+      request
+    );
+
+    return resp.data;
+  }
+
+  await delay(500);
+
+  return {
+    status: "SUCCESS",
+    data: {
+      ...request,
+    },
+  };
+};
+
 export default {
   setApi,
-
   getInventory,
   getTransactions,
-
   createTransaction,
+  importProduct,
+  exportProduct,
+  adjustProduct
 };

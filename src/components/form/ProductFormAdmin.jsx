@@ -1,430 +1,325 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { useProductStore } from "../../store/productStore";
+import { useCategoryStore } from "../../store/categoryStore";
+import { useProductImageStore } from "../../store/productImageStore";
 
-const STATUS_OPTIONS = [
-  { value: "ACTIVE", label: "Đang bán (Active)" },
-  { value: "INACTIVE", label: "Tạm ngưng (Inactive)" },
-  { value: "OUT_OF_STOCK", label: "Hết hàng" },
-];
-
-const ProductFormAdmin = ({ categories, initialData, onSubmit, onClose }) => {
+const ProductFormAdmin = ({  
+  initialData, 
+  onSubmit, 
+  onClose 
+}) => {
   const isEdit = !!initialData;
 
+  const { loading: loadingProduct } = useProductStore();
+  const { categories, fetchCategories } = useCategoryStore();
+  
+  // Kết nối các phương thức quản lý ảnh từ useProductImageStore
+  const { 
+    images: productImages, 
+    loading: loadingImages, 
+    fetchImages, 
+    uploadImages, 
+    deleteImage, 
+    setMainImage,
+    clearImages
+  } = useProductImageStore();
+
+  // State quản lý dữ liệu form bám sát theo Class ReqCreateProduct DTO
   const [formData, setFormData] = useState({
     name: "",
     description: "",
-    price: 0,
-    original_price: 0,
-    discount_percent: 0,
-    final_price: 0,
-    stock_quantity: 0,
-    category: "",
-    status: "ACTIVE",
-    thumbnail: "https://placehold.co/300x300",
-    images: [],
-    rating: 0,
-    review_count: 0,
+    price: "",
+    categoryId: "",
+    quantity: "",
   });
 
-  const [galleryInput, setGalleryInput] = useState("");
+  // Dùng ref để clear input file dễ dàng sau khi upload thành công
+  const fileInputRef = useRef(null);
 
-  // Đổ dữ liệu cũ vào form khi Edit
+  // ĐỒNG BỘ MỚI: Chỉ kích hoạt fetch các danh mục có loại là PRODUCT
+  useEffect(() => {
+    if (fetchCategories) {
+      fetchCategories({ type: "PRODUCT" });
+    }
+  }, [fetchCategories]);
+
+  // Đổ dữ liệu ban đầu hoặc Fetch ảnh từ server về nếu là Mode Edit
   useEffect(() => {
     if (initialData) {
+      const productId = initialData.id;
       setFormData({
         name: initialData.name || "",
         description: initialData.description || "",
-        price: initialData.price || 0,
-        original_price: initialData.original_price || initialData.price || 0,
-        discount_percent: initialData.discount_percent || 0,
-        final_price: initialData.final_price || initialData.price || 0,
-        stock_quantity: initialData.stock_quantity ?? 0,
-        category:
-          initialData.category?.code ||
-          initialData.category?.id ||
-          initialData.category ||
-          "",
-        status: initialData.status || "ACTIVE",
-        thumbnail: initialData.thumbnail || "https://placehold.co/300x300",
-        images: initialData.images || [],
-        rating: initialData.rating || 0,
-        review_count: initialData.review_count || 0,
+        price: initialData.price ?? "",
+        categoryId: initialData.categoryId || initialData.category?.id || "",
+        quantity: initialData.quantity ?? initialData.stockQuantity ?? initialData.stock_quantity ?? "",
       });
+
+      if (productId) {
+        fetchImages(productId);
+      }
     } else {
       setFormData({
         name: "",
         description: "",
-        price: 0,
-        original_price: 0,
-        discount_percent: 0,
-        final_price: 0,
-        stock_quantity: 0,
-        category: "",
-        status: "ACTIVE",
-        thumbnail: "https://placehold.co/300x300",
-        images: [],
-        rating: 0,
-        review_count: 0,
+        price: "",
+        categoryId: "",
+        quantity: "",
       });
+      clearImages();
     }
-    setGalleryInput("");
-  }, [initialData]);
+  }, [initialData, fetchImages, clearImages]);
 
-  // Tính giá cuối tự động
-  const handlePriceOrDiscountChange = (field, value) => {
-    setFormData((prev) => {
-      const updated = { ...prev, [field]: Number(value) };
-      const originalPrice =
-        field === "original_price" ? Number(value) : updated.original_price;
-      const discount =
-        field === "discount_percent" ? Number(value) : updated.discount_percent;
-      updated.final_price = originalPrice - (originalPrice * discount) / 100;
-      updated.price = updated.final_price;
-      return updated;
-    });
+  // Xử lý upload tập tin hình ảnh (Hỗ trợ chọn nhiều ảnh cùng lúc)
+  const handleFileChange = async (e) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+
+    // Ép kiểu FileList thành một Array thực thụ để pass qua Service/Store không bị lỗi .forEach
+    const filesArray = Array.from(fileList);
+
+    // Kiểm tra giới hạn số lượng ảnh (Tối đa 6) dựa trên mảng mới biến đổi
+    if (productImages.length + filesArray.length > 6) {
+      alert(`Hệ thống chỉ hỗ trợ tối đa 6 ảnh minh họa. Hiện tại bạn đã có ${productImages.length} ảnh.`);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    try {
+      // Truyền mảng chuẩn (Array) thay vì FileList gốc
+      await uploadImages(initialData.id, filesArray);
+    } catch (err) {
+      alert("Tải tập tin hình ảnh lên thất bại, vui lòng kiểm tra lại định dạng tệp.");
+    } finally {
+      // Reset input để có thể chọn lại chính tệp đó nếu muốn
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
-  const addGalleryImage = (url) => {
-    const trimmed = url.trim();
-    if (!trimmed || formData.images.length >= 6) return;
-    setFormData((p) => ({ ...p, images: [...p.images, trimmed] }));
-    setGalleryInput("");
+  const handleRemoveGalleryImage = async (imageId) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa hình ảnh này không?")) return;
+    try {
+      await deleteImage(imageId);
+    } catch (err) {
+      alert("Xóa ảnh thất bại!");
+    }
   };
 
-  const removeGalleryImage = (index) => {
-    setFormData((p) => ({
-      ...p,
-      images: p.images.filter((_, i) => i !== index),
-    }));
+  const handleSetMainImage = async (imageId) => {
+    try {
+      await setMainImage(initialData.id, imageId);
+    } catch (err) {
+      alert("Thay đổi ảnh đại diện chính thất bại!");
+    }
   };
 
-  const handleSubmit = () => {
-    // 1. Validate Tên dịch vụ
-    if (!formData.name.trim()) {
-      alert("Vui lòng nhập tên dịch vụ");
-      return;
+  // Validate và submit payload chuẩn DTO
+  const handleSubmitForm = () => {
+    if (!formData.name.trim()) return alert("Tên sản phẩm không được để trống");
+    if (!formData.description.trim()) return alert("Mô tả sản phẩm không được để trống");
+    if (formData.price === "" || Number(formData.price) < 0) return alert("Giá sản phẩm không hợp lệ");
+    if (!formData.categoryId) return alert("Vui lòng chọn danh mục");
+    if (formData.quantity === "" || Number(formData.quantity) < 0) return alert("Số lượng nhập kho không hợp lệ");
+
+    const submitPayload = {
+      name: formData.name.trim(),
+      description: formData.description.trim(),
+      price: Number(formData.price),         
+      categoryId: Number(formData.categoryId), 
+      quantity: Number(formData.quantity),     
+    };
+
+    if (isEdit && initialData?.id) {
+      submitPayload.id = Number(initialData.id);
     }
 
-    // 2. Validate Danh mục
-    if (!formData.category.id) {
-      alert("Vui lòng lựa chọn Danh mục dịch vụ");
-      return;
-    }
-
-    // 3. Validate Thời lượng
-    if (!formData.duration_minutes || formData.duration_minutes < 5) {
-      alert("Thời lượng dịch vụ phải từ 5 phút trở lên");
-      return;
-    }
-
-    // 4. Validate Giá gốc
-    if (formData.original_price === "" || formData.original_price < 0) {
-      alert("Giá gốc không được để trống và phải lớn hơn hoặc bằng 0");
-      return;
-    }
-
-    // 5. Validate Giảm giá (nếu có nhập)
-    if (formData.discount_percent < 0 || formData.discount_percent > 100) {
-      alert("Phần trăm giảm giá phải từ 0 đến 100");
-      return;
-    }
-
-    // 6. Validate Loài thú cưng phù hợp (Tùy chọn - nếu bạn bắt buộc phải chọn)
-    if (formData.suitable_for.length === 0) {
-      alert("Vui lòng chọn ít nhất một loài thú cưng phù hợp");
-      return;
-    }
-    onSubmit(formData);
+    onSubmit(submitPayload);
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {/* Loading Overlay khi hệ thống đang xử lý sản phẩm */}
+      {loadingProduct && (
+        <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] flex flex-col items-center justify-center z-50">
+          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-2"></div>
+          <span className="text-sm font-medium text-gray-600">Đang xử lý dữ liệu sản phẩm...</span>
+        </div>
+      )}
 
-      {/* ── Group 1: Tên & Danh mục ── */}
+      {/* ── Group 1: Tên & Danh mục sản phẩm ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Tên sản phẩm *
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Tên sản phẩm *</label>
           <input
             type="text"
             value={formData.name}
             onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
-            placeholder="Ví dụ: Hạt Royal Canin Poodle 1kg"
+            placeholder="Nhập tên sản phẩm..."
             className="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Danh mục *
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Danh mục sản phẩm *</label>
           <select
-            value={formData.category}
-            onChange={(e) => setFormData((p) => ({ ...p, category: e.target.value }))}
+            value={formData.categoryId}
+            onChange={(e) => setFormData((p) => ({ ...p, categoryId: e.target.value }))}
             className="w-full rounded-lg border border-gray-300 p-2.5 text-sm outline-none focus:border-blue-500"
           >
             <option value="">-- Chọn danh mục --</option>
-            {categories.map((cat) => (
-              <option key={cat.value} value={cat.value}>
-                {cat.label}
-              </option>
-            ))}
+            {/* SỬA ĐỔI CHÍNH: Lọc chặt chẽ một lần nữa trước khi render lên UI */}
+            {categories && categories
+              .filter((cat) => cat.categoryType === 'PRODUCT' || cat.type === 'PRODUCT' || !cat.categoryType) 
+              // Thêm điều kiện !cat.categoryType dự phòng nếu store chỉ lưu mảng map sẵn {value, label}
+              .map((cat) => (
+                <option key={cat.value || cat.id} value={cat.value || cat.id}>
+                  {cat.label || cat.name}
+                </option>
+              ))
+            }
           </select>
         </div>
       </div>
 
-      {/* ── Group 2: Mô tả ── */}
+      {/* ── Group 2: Mô tả sản phẩm ── */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Mô tả sản phẩm
-        </label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả sản phẩm *</label>
         <textarea
           rows="3"
           value={formData.description}
           onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))}
-          placeholder="Nhập mô tả chi tiết về sản phẩm..."
+          placeholder="Mô tả chi tiết các đặc tính, công dụng sản phẩm..."
           className="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
         />
       </div>
 
-      {/* ── Group 3: Giá ── */}
-      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Giá gốc (đ) *
-          </label>
-          <input
-            type="number"
-            min="0"
-            step="1000"
-            value={formData.original_price}
-            onChange={(e) =>
-              handlePriceOrDiscountChange("original_price", e.target.value)
-            }
-            className="w-full rounded-lg border border-gray-300 p-2.5 text-sm outline-none bg-white font-semibold text-gray-800"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Giảm giá (%)
-          </label>
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={formData.discount_percent}
-            onChange={(e) =>
-              handlePriceOrDiscountChange("discount_percent", e.target.value)
-            }
-            className="w-full rounded-lg border border-gray-300 p-2.5 text-sm outline-none bg-white"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-blue-700 font-semibold mb-1">
-            Giá bán cuối (đ)
-          </label>
-          <input
-            type="text"
-            disabled
-            value={
-              formData.final_price
-                ? formData.final_price.toLocaleString("vi-VN")
-                : "0"
-            }
-            className="w-full rounded-lg border border-blue-200 bg-blue-50 p-2.5 text-sm font-bold text-blue-700 cursor-not-allowed"
-          />
-        </div>
-      </div>
-
-      {/* ── Group 4: Tồn kho & Trạng thái ── */}
+      {/* ── Group 3: Giá bán & Số lượng ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Số lượng tồn kho *
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Giá sản phẩm (đ) *</label>
           <input
             type="number"
             min="0"
-            value={formData.stock_quantity}
-            onChange={(e) =>
-              setFormData((p) => ({ ...p, stock_quantity: Number(e.target.value) }))
-            }
-            className="w-full rounded-lg border border-gray-300 p-2.5 text-sm outline-none"
+            value={formData.price}
+            onChange={(e) => setFormData((p) => ({ ...p, price: e.target.value }))}
+            placeholder="Nhập giá bán..."
+            className="w-full rounded-lg border border-gray-300 p-2.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium text-gray-800"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Trạng thái hiển thị
-          </label>
-          <select
-            value={formData.status}
-            onChange={(e) => setFormData((p) => ({ ...p, status: e.target.value }))}
-            className="w-full rounded-lg border border-gray-300 p-2.5 text-sm outline-none"
-          >
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Số lượng nhập kho ban đầu *</label>
+          <input
+            type="number"
+            min="0"
+            value={formData.quantity}
+            onChange={(e) => setFormData((p) => ({ ...p, quantity: e.target.value }))}
+            placeholder="Nhập số lượng tồn..."
+            className="w-full rounded-lg border border-gray-300 p-2.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+          />
         </div>
       </div>
 
-      {/* ── Group 5: Ảnh sản phẩm ── */}
-      <div className="space-y-4">
-        <label className="block text-sm font-semibold text-gray-800">
-          Ảnh sản phẩm
-        </label>
-
-        {/* Thumbnail */}
-        <div>
-          <p className="text-xs text-gray-500 mb-2">Ảnh đại diện (Thumbnail)</p>
-          <div className="flex items-start gap-4">
-            <img
-              src={formData.thumbnail}
-              alt="thumbnail"
-              className="w-24 h-24 rounded-2xl object-cover border border-gray-200 shrink-0 bg-gray-50"
-              onError={(e) => { e.target.src = "https://placehold.co/300x300"; }}
-            />
-            <div className="flex-1 space-y-2">
-              <input
-                type="text"
-                value={formData.thumbnail}
-                onChange={(e) =>
-                  setFormData((p) => ({ ...p, thumbnail: e.target.value }))
-                }
-                placeholder="Dán URL ảnh thumbnail..."
-                className="w-full rounded-lg border border-gray-300 p-2.5 text-sm outline-none focus:border-blue-500"
-              />
-              <p className="text-[11px] text-gray-400">
-                Khuyến nghị: ảnh vuông 300×300px, dưới 2MB
-              </p>
+      {/* ── Group 4: Quản lý Album Ảnh bằng File Upload (Chỉ hiển thị khi EDIT) ── */}
+      {isEdit && (
+        <div className="space-y-4 border-t border-gray-100 pt-4 relative">
+          {loadingImages && (
+            <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] flex items-center justify-center z-10">
+              <span className="text-xs font-semibold text-gray-500 animate-pulse">Đang đồng bộ tập tin ảnh...</span>
             </div>
-          </div>
-        </div>
+          )}
+          
+          <label className="block text-sm font-semibold text-gray-800">Quản lý Album Ảnh sản phẩm</label>
+          
+          <div>
+            <p className="text-xs text-gray-500 mb-2">
+              Danh sách hình ảnh chi tiết từ hệ thống ({productImages.length}/6)
+            </p>
+            <p className="text-[11px] text-gray-400 mb-3">
+              * Mẹo: Click trực tiếp vào một ảnh để cấu hình đặt làm ảnh hiển thị chính (Thumbnail).
+            </p>
 
-        {/* Gallery */}
-        <div>
-          <p className="text-xs text-gray-500 mb-2">
-            Bộ ảnh minh hoạ ({formData.images.length}/6)
-          </p>
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-3">
-            {formData.images.map((url, idx) => (
-              <div key={idx} className="relative group aspect-square">
-                <img
-                  src={url}
-                  alt={`img-${idx}`}
-                  className="w-full h-full rounded-xl object-cover border border-gray-200 bg-gray-50"
-                  onError={(e) => { e.target.src = "https://placehold.co/300x300"; }}
-                />
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-4">
+              {productImages.map((img) => {
+                const isMain = img.isThumbnail || img.isMain;
+                const currentImgUrl = img.imageUrl || img.url;
+                return (
+                  <div 
+                    key={img.id} 
+                    className={`relative group aspect-square rounded-xl border overflow-hidden cursor-pointer ${
+                      isMain ? 'border-orange-500 ring-2 ring-orange-400/30' : 'border-gray-200'
+                    }`}
+                  >
+                    <img
+                      src={currentImgUrl}
+                      alt={`gallery-${img.id}`}
+                      className="w-full h-full object-cover bg-gray-50"
+                      onClick={() => handleSetMainImage(img.id)}
+                      title="Click để đặt làm ảnh hiển thị chính"
+                      onError={(e) => { e.target.src = "https://placehold.co/300x300"; }}
+                    />
+                    
+                    {isMain && (
+                      <span className="absolute bottom-1 left-1 bg-orange-500 text-white text-[9px] px-1.5 py-0.5 rounded font-bold shadow">
+                        Chính
+                      </span>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation(); 
+                        handleRemoveGalleryImage(img.id);
+                      }}
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow hover:bg-red-600"
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
+              
+              {productImages.length < 6 && (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="aspect-square rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/40 transition-colors text-gray-400 hover:text-blue-500"
+                >
+                  <span className="text-2xl leading-none">+</span>
+                  <span className="text-[10px] mt-1">Tải ảnh lên</span>
+                </div>
+              )}
+            </div>
+
+            {/* Input file ẩn phục vụ việc click chọn tệp */}
+            <div className="hidden">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*"
+                multiple 
+              />
+            </div>
+            
+            {productImages.length < 6 && (
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => removeGalleryImage(idx)}
-                  className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-slate-800 text-white px-4 py-2 rounded-lg text-xs font-medium hover:bg-slate-900 transition-colors flex items-center gap-1.5 shadow-sm"
                 >
-                  ×
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 12 12M12 3v13.5" />
+                  </svg>
+                  Chọn tệp từ thiết bị
                 </button>
-              </div>
-            ))}
-            {formData.images.length < 6 && (
-              <div
-                onClick={() => {
-                  const url = window.prompt("Nhập URL ảnh:");
-                  if (url?.trim()) {
-                    setFormData((p) => ({
-                      ...p,
-                      images: [...p.images, url.trim()],
-                    }));
-                  }
-                }}
-                className="aspect-square rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/40 transition-colors text-gray-400 hover:text-blue-500"
-              >
-                <span className="text-2xl leading-none">+</span>
-                <span className="text-[10px] mt-1">Thêm ảnh</span>
+                <span className="text-xs text-gray-400">Hỗ trợ các định dạng .png, .jpg, .jpeg, .webp</span>
               </div>
             )}
           </div>
-
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={galleryInput}
-              onChange={(e) => setGalleryInput(e.target.value)}
-              placeholder="Hoặc dán URL ảnh rồi nhấn Thêm..."
-              className="flex-1 rounded-lg border border-gray-300 p-2 text-sm outline-none focus:border-blue-500"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  addGalleryImage(galleryInput);
-                }
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => addGalleryImage(galleryInput)}
-              disabled={formData.images.length >= 6}
-              className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-slate-900 disabled:bg-slate-300 disabled:cursor-not-allowed"
-            >
-              Thêm
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Group 6: Thống kê (chỉ Edit mode) ── */}
-      {isEdit && (
-        <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100 rounded-2xl p-4 space-y-4">
-          <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-            ⭐ Thống kê & Đánh giá
-            <span className="text-[11px] font-normal text-gray-400 bg-white px-2 py-0.5 rounded-full border">
-              Dữ liệu tự động từ hệ thống
-            </span>
-          </p>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-white rounded-xl p-3 text-center border border-amber-100 space-y-1">
-              <div className="text-2xl font-black text-amber-500">
-                {formData.rating?.toFixed(1) ?? "—"}
-              </div>
-              <div className="text-xs text-gray-500">Điểm đánh giá TB</div>
-              <div className="flex justify-center gap-0.5">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <span
-                    key={star}
-                    className={`text-sm ${
-                      star <= Math.round(formData.rating)
-                        ? "text-amber-400"
-                        : "text-gray-200"
-                    }`}
-                  >
-                    ★
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl p-3 text-center border border-amber-100 space-y-1">
-              <div className="text-2xl font-black text-blue-500">
-                {formData.review_count?.toLocaleString() ?? 0}
-              </div>
-              <div className="text-xs text-gray-500">Lượt đánh giá</div>
-              <div className="text-lg">💬</div>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() =>
-              window.open(`/admin/reviews?product_id=${initialData?.id}`, "_blank")
-            }
-            className="w-full py-2 rounded-xl border border-amber-200 text-sm font-semibold text-amber-700 bg-white hover:bg-amber-50 transition-colors flex items-center justify-center gap-2"
-          >
-            <span>📝</span> Xem tất cả đánh giá của sản phẩm này
-          </button>
         </div>
       )}
 
-      {/* ── Footer ── */}
-      <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
+      {/* ── Group 5: Hộp điều hướng Actions Footer ── */}
+      <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
         <button
           type="button"
           onClick={onClose}
@@ -434,10 +329,10 @@ const ProductFormAdmin = ({ categories, initialData, onSubmit, onClose }) => {
         </button>
         <button
           type="button"
-          onClick={handleSubmit}
+          onClick={handleSubmitForm}
           className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 flex items-center gap-2"
         >
-          {isEdit ? "Lưu thay đổi" : "Thêm sản phẩm"}
+          {isEdit ? "Cập nhật sản phẩm" : "Tạo sản phẩm mới"}
         </button>
       </div>
     </div>

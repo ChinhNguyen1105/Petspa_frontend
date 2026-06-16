@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { useWarehouseStore } from "../../../store/warehouseStore"; // Đường dẫn store của bạn
-import { useCartStore } from "../../../store/cartStore"; // Đồng bộ lấy showToast hệ thống
+import { useWarehouseStore } from "../../../store/warehouseStore";
+import { useCartStore } from "../../../store/cartStore";
 import { 
   Search, 
   RefreshCw, 
@@ -24,9 +24,11 @@ const InventoryListManagement = () => {
     inventoryKeyword,
     minQuantity,
     maxQuantity,
+    productId,
     setInventoryKeyword,
     setMinQuantity,
     setMaxQuantity,
+    setProductId,
     fetchInventory,
     resetFilters,
   } = useWarehouseStore();
@@ -36,19 +38,27 @@ const InventoryListManagement = () => {
   // ── LOCAL UI STATES ──
   const [currentPage, setCurrentPage] = useState(1);
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
+  const pageSize = 10; // Cố định số lượng phần tử trên một trang
 
   // Lắng nghe các filter và trang hiện tại thay đổi để gọi API Server
   useEffect(() => {
     fetchInventory({
       page: currentPage,
-      pageSize: 10,
+      pageSize: pageSize,
+      productId: productId || null,
     });
-  }, [currentPage, inventoryKeyword, minQuantity, maxQuantity, fetchInventory]);
+  }, [currentPage, inventoryKeyword, minQuantity, maxQuantity, productId, fetchInventory]);
 
   // Bộ xử lý thay đổi từ ô Tìm kiếm Keyword
   const handleKeywordChange = (e) => {
     setInventoryKeyword(e.target.value);
     setCurrentPage(1); // Reset chủ động về trang 1 khi tìm kiếm
+  };
+
+  // Bộ xử lý thay đổi mã sản phẩm (Đồng bộ với trường productId trong store)
+  const handleProductIdChange = (e) => {
+    setProductId(e.target.value);
+    setCurrentPage(1);
   };
 
   // Bộ xử lý thay đổi Min Quantity
@@ -72,14 +82,14 @@ const InventoryListManagement = () => {
 
   // Làm mới dữ liệu thủ công
   const handleManualRefresh = async () => {
-    await fetchInventory({ page: currentPage, pageSize: 10 });
+    await fetchInventory({ page: currentPage, pageSize: pageSize });
     showToast("Đã đồng bộ dữ liệu kho mới nhất", "success");
   };
 
-  // Trích xuất các biến phân trang từ metaInventory hệ thống trả về
+  // Trích xuất các biến phân trang an toàn từ meta dữ liệu hệ thống
   const totalItems = metaInventory?.total || 0;
-  const totalPages = metaInventory?.pages || 1;
-  const pageSize = metaInventory?.pageSize || 10;
+  // Tính toán tổng số trang dựa trên dữ liệu thật vì meta trả về chỉ đảm bảo thuộc tính total
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
 
   // Tính số thứ tự (STT) tăng tiến chuẩn dựa trên trang hiện tại
   const getGlobalIndex = (index) => {
@@ -98,7 +108,7 @@ const InventoryListManagement = () => {
   return (
     <div className="p-6 space-y-6 bg-gray-50 min-h-screen">
       
-      {/* ── BREADCRUMB & TIÊU ĐỀ TRANG TRUÂN PHONG CÁCH ── */}
+      {/* ── BREADCRUMB & TIÊU ĐỀ TRANG ── */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
@@ -136,9 +146,22 @@ const InventoryListManagement = () => {
         </div>
       </div>
 
-      {/* ── BỘ LỌC NÂNG CAO (Mở rộng linh hoạt nếu bấm) ── */}
+      {/* ── BỘ LỌC NÂNG CAO ── */}
       {showAdvancedFilter && (
-        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4 animate-fadeIn">
+        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm grid grid-cols-1 sm:grid-cols-4 gap-4 animate-fadeIn">
+          <div>
+            <label className="block text-xs font-black text-gray-400 uppercase tracking-wider mb-1.5">
+              Mã Sản Phẩm (ID)
+            </label>
+            <input
+              type="text"
+              placeholder="Ví dụ: 101"
+              value={productId}
+              onChange={handleProductIdChange}
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-orange-500 focus:bg-white transition-all text-gray-700 font-bold"
+            />
+          </div>
+
           <div>
             <label className="block text-xs font-black text-gray-400 uppercase tracking-wider mb-1.5">
               Số lượng tối thiểu (Min)
@@ -173,7 +196,7 @@ const InventoryListManagement = () => {
               onClick={handleClearFilters}
               className="w-full flex items-center justify-center gap-2 py-2 border border-dashed border-red-200 text-red-500 hover:bg-red-50 text-xs font-bold rounded-xl transition-all"
             >
-              <FilterX size={14} /> Xóa toàn bộ bộ lọc
+              <FilterX size={14} /> Xóa bộ lọc
             </button>
           </div>
         </div>
@@ -213,7 +236,13 @@ const InventoryListManagement = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {inventory.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan="6" className="p-16 text-center">
+                      <Loading size="small" />
+                    </td>
+                  </tr>
+                ) : inventory.length === 0 ? (
                   <tr>
                     <td colSpan="6" className="p-16 text-center text-gray-400 font-medium">
                       <div className="flex flex-col items-center justify-center space-y-2">
@@ -226,12 +255,11 @@ const InventoryListManagement = () => {
                   </tr>
                 ) : (
                   inventory.map((item, index) => {
-                    // Kiểm tra cảnh báo nếu tồn kho hết hàng hoặc quá ít (ví dụ dưới 10)
                     const isLowStock = item.quantity <= 10;
                     const isOutOfStock = item.quantity === 0;
 
                     return (
-                      <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group">
+                      <tr key={item.id || index} className="hover:bg-gray-50/50 transition-colors group">
                         {/* STT */}
                         <td className="p-4 text-center font-mono text-xs text-gray-400">
                           {getGlobalIndex(index)}
@@ -269,7 +297,7 @@ const InventoryListManagement = () => {
                           {item.productPrice ? `${item.productPrice.toLocaleString()} đ` : "---"}
                         </td>
 
-                        {/* KHỐI SỐ LƯỢNG TỒN KHÓ KÈM BADGE CẢNH BÁO */}
+                        {/* KHỐI SỐ LƯỢNG TỒN KHO KÈM BADGE */}
                         <td className="p-4 text-center">
                           <div className="flex flex-col items-center justify-center gap-1">
                             <span className={`text-sm font-black font-mono px-3 py-1 rounded-xl border ${
@@ -282,7 +310,6 @@ const InventoryListManagement = () => {
                               {item.quantity}
                             </span>
                             
-                            {/* Hiển thị text nhãn cảnh báo động */}
                             {isOutOfStock && (
                               <span className="text-[9px] font-black text-red-500 tracking-wide uppercase flex items-center gap-0.5">
                                 <AlertTriangle size={10} /> Hết hàng
@@ -309,12 +336,12 @@ const InventoryListManagement = () => {
           </div>
         </div>
 
-        {/* ── PHÂN TRANG VÀ THÔNG SỐ ĐỒNG BỘ TỪ SERVER API ── */}
+        {/* ── PHÂN TRANG VÀ THÔNG SỐ ── */}
         <div className="bg-gray-50/50 px-4 py-3 border-t border-gray-100 flex items-center justify-between">
           <div className="text-xs font-bold text-gray-400">
             Tổng sản phẩm trong kho: <span className="text-slate-700">{totalItems}</span> vật tư
             {totalItems > 0 && (
-              ` (Đang hiển thị ${(currentPage - 1) * pageSize + 1} - ${Math.min(currentPage * pageSize, totalItems)})`
+              ` (Đang hiển thị ${getGlobalIndex(0)} - ${Math.min(currentPage * pageSize, totalItems)})`
             )}
           </div>
           

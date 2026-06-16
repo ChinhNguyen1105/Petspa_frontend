@@ -1,365 +1,419 @@
 import React, { useState, useEffect } from "react";
-import Modal from "../common/Modal";
-import { Image, Trash2, Check, Plus, AlertCircle, Loader2 } from "lucide-react";
+import {
+  Image,
+  Trash2,
+  Check,
+  Plus,
+  AlertCircle,
+  Loader2,
+  Link,
+} from "lucide-react";
 
 import { useServiceStore } from "../../store/serviceStore";
 import { useCategoryStore } from "../../store/categoryStore";
-import { usePetServiceImageStore } from "../../store/petServiceImageStore"; // 🌟 Import store ảnh
+import { usePetServiceImageStore } from "../../store/petServiceImageStore";
+import { useCartStore } from "../../store/cartStore";
 
-const ServiceFormAdmin = ({ isOpen, onClose, onSave, serviceData = null }) => {
-  const isEdit = !!serviceData;
+const ServiceFormAdmin = ({ initialData, onSubmit, onClose }) => {
+  const isEdit = !!initialData;
+console.log("initialData", initialData);
 
   // ─── STORES ──────────────────────────────────────────────────────────────────
-  const { createService, updateService, submitting } = useServiceStore();
+  const { submitting } = useServiceStore();
   const { categories, fetchCategories } = useCategoryStore();
-  
-  // Các hàm tương tác ảnh từ Zustand Store của bạn
-  const { 
-    images, 
-    loading: loadingImages, 
-    fetchImages, 
-    addImage, 
-    deleteImage, 
+
+  const {
+    images: serviceImages,
+    loading: loadingImages,
+    fetchImages,
+    addImage, // Giữ nguyên hàm addImage nhận Url từ store của bạn
+    deleteImage,
     setMainImage,
-    clearImages
+    clearImages,
   } = usePetServiceImageStore();
 
+  const { showToast } = useCartStore();
+
   // ─── LOCAL STATE ─────────────────────────────────────────────────────────────
-  const emptyForm = {
+  const [formData, setFormData] = useState({
     name: "",
     description: "",
-    basePrice: 0,
-    durationMin: 30,
+    basePrice: "",
+    durationMin: "30",
     categoryId: "",
-  };
+  });
 
-  const [formData, setFormData] = useState(emptyForm);
   const [errorMsg, setErrorMsg] = useState("");
-  const [newImageUrl, setNewImageUrl] = useState(""); // Lưu URL ảnh chuẩn bị thêm
+  const [newImageUrl, setNewImageUrl] = useState("");
 
-  // ─── EFFECT: FETCH METADATA & IMAGES ─────────────────────────────────────────
+  // ─── EFFECT: FETCH METADATA CATEGORIES ───────────────────────────────────────
   useEffect(() => {
-    if (!isOpen) return;
-    fetchCategories({ type: "SERVICE" });
-    
-    // Nếu là chế độ chỉnh sửa, tiến hành fetch ảnh của dịch vụ này
-    if (serviceData?.id) {
-      fetchImages(serviceData.id);
-    } else {
-      clearImages(); // Thêm mới thì dọn sạch mảng ảnh cũ trong store
+    if (fetchCategories) {
+      fetchCategories({ type: "SERVICE" });
     }
-  }, [isOpen, serviceData, fetchCategories, fetchImages, clearImages]);
+  }, [fetchCategories]);
 
-  // ─── EFFECT: ĐIỀN / RESET FORM ───────────────────────────────────────────────
+  // ─── EFFECT: ĐIỀN DỮ LIỆU BAN ĐẦU HOẶC RESET ─────────────────────────────────
+  // ─── EFFECT: ĐIỀN DỮ LIỆU BAN ĐẦU HOẶC RESET ─────────────────────────────────
   useEffect(() => {
-    if (!isOpen) return;
+    if (initialData) {
+      const serviceId = initialData.id;
+
+      // Tìm ID danh mục an toàn từ dữ liệu ban đầu
+      const rawCategoryId =
+        initialData.categoryId || initialData.category?.id || "";
+
+      setFormData({
+        name: initialData.name || "",
+        description: initialData.description || "",
+        basePrice: initialData.basePrice ?? initialData.original_price ?? "",
+        durationMin:
+          initialData.durationMin ?? initialData.duration_minutes ?? "30",
+        // SỬA TẠI ĐÂY: Ép kiểu sang String để đồng bộ hoàn toàn với value của thẻ <select>
+        categoryId: rawCategoryId ? rawCategoryId.toString() : "",
+      });
+
+      if (serviceId) {
+        fetchImages(serviceId);
+      }
+    } else {
+      setFormData({
+        name: "",
+        description: "",
+        basePrice: "",
+        durationMin: "30",
+        categoryId: "",
+      });
+      clearImages();
+    }
     setErrorMsg("");
     setNewImageUrl("");
+  }, [initialData, fetchImages, clearImages]);
 
-    if (serviceData) {
-      setFormData({
-        name: serviceData.name || "",
-        description: serviceData.description || "",
-        basePrice: serviceData.basePrice || serviceData.original_price || 0,
-        durationMin: serviceData.durationMin || serviceData.duration_minutes || 30,
-        categoryId: serviceData.categoryId || serviceData.category?.id || "",
-      });
-    } else {
-      setFormData(emptyForm);
-    }
-  }, [isOpen, serviceData]);
-
-  // ─── HANDLERS FORM TINH GỌN ─────────────────────────────────────────────────
-  const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+  // ─── HANDLERS FORM DỮ LIỆU ──────────────────────────────────────────────────
+  const handleInputChange = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = async () => {
+  const handleValidationAndSubmit = () => {
     setErrorMsg("");
 
-    if (!formData.name.trim()) return setErrorMsg("Vui lòng điền tên dịch vụ");
-    if (!formData.description.trim()) return setErrorMsg("Vui lòng điền mô tả dịch vụ");
-    if (!formData.categoryId) return setErrorMsg("Vui lòng lựa chọn Danh mục dịch vụ");
-    if (Number(formData.basePrice) <= 0) return setErrorMsg("Giá gốc niêm yết phải lớn hơn 0đ");
-    if (Number(formData.durationMin) <= 0) return setErrorMsg("Thời lượng dịch vụ phải lớn hơn 0 phút");
+    if (!formData.name.trim())
+      return setErrorMsg("Tên dịch vụ không được để trống");
+    if (!formData.description.trim())
+      return setErrorMsg("Mô tả dịch vụ không được để trống");
+    if (!formData.categoryId)
+      return setErrorMsg("Vui lòng lựa chọn danh mục dịch vụ");
+    if (formData.basePrice === "" || Number(formData.basePrice) <= 0)
+      return setErrorMsg("Giá dịch vụ niêm yết phải lớn hơn 0đ");
+    if (formData.durationMin === "" || Number(formData.durationMin) <= 0)
+      return setErrorMsg("Thời lượng thực hiện phải lớn hơn 0 phút");
 
-    try {
-      const payload = {
-        id: isEdit ? serviceData.id : null,
-        name: formData.name.trim(),
-        description: formData.description.trim(),
-        basePrice: Number(formData.basePrice),
-        durationMin: Number(formData.durationMin),
-        categoryId: Number(formData.categoryId),
-      };
+    const submitPayload = {
+      name: formData.name.trim(),
+      description: formData.description.trim(),
+      basePrice: Number(formData.basePrice),
+      durationMin: Number(formData.durationMin),
+      categoryId: Number(formData.categoryId),
+    };
 
-      const res = isEdit
-        ? await updateService(serviceData.id, payload)
-        : await createService(payload);
-console.log("Response:", res);
-      if (res?.success) {
-        onSave(res.data);
-        onClose();
-      } else {
-        setErrorMsg(res?.message || "Đã có lỗi xảy ra từ máy chủ khi lưu dữ liệu.");
-      }
-    } catch (err) {
-      console.error("Submit Error: ", err);
-      setErrorMsg("Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại.");
+    if (isEdit && initialData?.id) {
+      submitPayload.id = Number(initialData.id);
     }
+
+    // Đẩy payload sạch lên view cha tự điều phối xử lý API
+    onSubmit(submitPayload);
   };
 
-  // ─── HANDLERS ẢNH REAL-TIME ──────────────────────────────────────────────────
-  const handleAddImage = async (e) => {
+  // ─── HANDLERS QUẢN LÝ ẢNH BẰNG URL REAL-TIME ──────────────────────────────────
+  const handleAddImageUrl = async (e) => {
     e.preventDefault();
     if (!newImageUrl.trim()) return;
-    try {
-      // Mặc định nếu chưa có ảnh nào thì đặt ảnh đầu tiên này làm Thumbnail luôn
-      const isFirstImg = images.length === 0;
-      await addImage(serviceData.id, newImageUrl.trim(), isFirstImg);
-      setNewImageUrl(""); // Thêm xong xóa trống thanh input url
-    } catch (err) {
-      alert("Không thể thêm ảnh. Vui lòng kiểm tra link ảnh hợp lệ.");
-    }
-  };
 
-  const handleDeleteImage = async (imgId) => {
-    if (window.confirm("Bạn có chắc chắn muốn xóa hình ảnh này không?")) {
-      try {
-        await deleteImage(imgId);
-      } catch (err) {
-        alert("Xóa ảnh thất bại!");
+    if (serviceImages.length >= 6) {
+      showToast(
+        "Hệ thống chỉ hỗ trợ tối đa 6 hình ảnh minh họa cho một dịch vụ.",
+        "error",
+      );
+      return;
+    }
+
+    try {
+      if (isEdit && initialData?.id) {
+        const isFirstImg = serviceImages.length === 0;
+        await addImage(initialData.id, newImageUrl.trim(), isFirstImg);
+        setNewImageUrl("");
+        showToast("Thêm hình ảnh vào album thành công! 📸", "success");
+      } else {
+        showToast(
+          "Vui lòng tạo dịch vụ trước khi thêm ảnh vào album chi tiết.",
+          "error",
+        );
       }
+    } catch (err) {
+      showToast(
+        "Không thể lưu liên kết hình ảnh này. Vui lòng kiểm tra lại.",
+        "error",
+      );
     }
   };
 
-  const handleSetThumbnail = async (imgId) => {
+  const handleRemoveImage = async (imageId) => {
+    if (
+      !window.confirm(
+        "Bạn có chắc chắn muốn xóa hình ảnh này khỏi album không?",
+      )
+    )
+      return;
     try {
-      await setMainImage(imgId);
+      await deleteImage(imageId);
+      showToast("Đã xóa hình ảnh thành công!", "success");
     } catch (err) {
-      alert("Thiết lập ảnh đại diện thất bại!");
+      showToast("Xóa ảnh dịch vụ thất bại!", "error");
+    }
+  };
+
+  const handleSetMainImage = async (imageId) => {
+    try {
+      await setMainImage(imageId);
+      showToast("Thay đổi ảnh hiển thị đại diện thành công! 🖼️", "success");
+    } catch (err) {
+      showToast("Thiết lập ảnh đại diện thất bại!", "error");
     }
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={isEdit ? "✏️ Cập Nhật Dịch Vụ Spa & Ảnh" : "✨ Thêm Mới Dịch Vụ Spa"}
-      size="xl" // Mở rộng size xl để chứa vừa vặn giao diện 2 cột thông minh
-    >
-      {/* Giao diện lưới 2 cột chia đôi không gian */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 px-1">
-        
-        {/* CỘT TRÁI (7 cột): Form nhập liệu 5 trường chính */}
-        <div className="lg:col-span-7 space-y-4">
-          <h4 className="text-sm font-black text-gray-800 uppercase tracking-wider pb-2 border-b border-gray-100">
-            📝 Thông tin dịch vụ cơ bản
-          </h4>
+    <div className="space-y-6 relative">
+      {/* Khung loading bao phủ khi form đang submit */}
+      {submitting && (
+        <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] flex flex-col items-center justify-center z-50 rounded-xl">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-2" />
+          <span className="text-sm font-medium text-gray-600">
+            Hệ thống đang lưu dữ liệu dịch vụ...
+          </span>
+        </div>
+      )}
 
-          {errorMsg && (
-            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-600 font-medium flex items-center gap-2">
-              <AlertCircle size={16} /> {errorMsg}
-            </div>
-          )}
+      {errorMsg && (
+        <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-600 font-medium flex items-center gap-2 animate-fadeIn">
+          <AlertCircle size={16} className="flex-shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
 
-          {/* Tên dịch vụ */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tên dịch vụ *</label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => handleChange("name", e.target.value)}
-              className="w-full rounded-lg border border-gray-300 p-2.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
-              placeholder="Ví dụ: Combo Cắt Tỉa Tạo Kiểu"
-            />
-          </div>
-
-          {/* Mô tả dịch vụ */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả dịch vụ *</label>
-            <textarea
-              rows="4"
-              value={formData.description}
-              onChange={(e) => handleChange("description", e.target.value)}
-              className="w-full rounded-lg border border-gray-300 p-2.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
-              placeholder="Nhập giới thiệu chi tiết về hiệu quả gói dịch vụ..."
-            />
-          </div>
-
-          {/* Danh mục dịch vụ */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Danh mục dịch vụ *</label>
-            <select
-              value={formData.categoryId}
-              onChange={(e) => handleChange("categoryId", e.target.value)}
-              className="w-full rounded-lg border border-gray-300 p-2.5 outline-none focus:border-blue-500 bg-white"
-            >
-              <option value="">-- Chọn danh mục --</option>
-              {categories.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Giá và Thời lượng */}
+      {/* Layout chia 2 phần tương tự form Product: Thông tin và Album (nếu sửa) */}
+      <div className="grid grid-cols-1 gap-6">
+        {/* ── Khối 1: Thông tin dịch vụ cơ bản ── */}
+        <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Giá gốc niêm yết (đ) *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tên dịch vụ spa *
+              </label>
               <input
-                type="number"
-                min="1000"
-                step="1000"
-                value={formData.basePrice}
-                onChange={(e) => handleChange("basePrice", e.target.value)}
-                className="w-full rounded-lg border border-gray-300 p-2.5 outline-none font-semibold text-gray-800"
+                type="text"
+                value={formData.name}
+                onChange={(e) => handleInputChange("name", e.target.value)}
+                placeholder="Ví dụ: Combo Tắm Sấy & Vệ Sinh Tai"
+                className="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Thời lượng (Phút) *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Danh mục dịch vụ *
+              </label>
+              <select
+                value={formData.categoryId}
+                onChange={(e) =>
+                  handleInputChange("categoryId", e.target.value)
+                }
+                className="w-full rounded-lg border border-gray-300 p-2.5 text-sm outline-none focus:border-blue-500 bg-white"
+              >
+                <option value="">-- Chọn danh mục dịch vụ --</option>
+                {categories &&
+                  categories
+                    .filter(
+                      (cat) =>
+                        cat.categoryType === "SERVICE" ||
+                        cat.type === "SERVICE" ||
+                        !cat.categoryType ||
+                        cat.id?.toString() === formData.categoryId, // SỬA TẠI ĐÂY: Luôn giữ lại danh mục đang chọn khi sửa
+                    )
+                    .map((cat) => (
+                      // Ép cat.id sang string ở value để đồng nhất dữ liệu
+                      <option key={cat.id} value={cat.id?.toString()}>
+                        {cat.name}
+                      </option>
+                    ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Mô tả dịch vụ chi tiết *
+            </label>
+            <textarea
+              rows="3"
+              value={formData.description}
+              onChange={(e) => handleInputChange("description", e.target.value)}
+              placeholder="Mô tả chi tiết các bước trong quy trình phục vụ thú cưng..."
+              className="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Giá gốc niêm yết (đ) *
+              </label>
               <input
                 type="number"
-                min="5"
+                min="0"
+                step="1000"
+                value={formData.basePrice}
+                onChange={(e) => handleInputChange("basePrice", e.target.value)}
+                placeholder="Nhập giá cơ bản..."
+                className="w-full rounded-lg border border-gray-300 p-2.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-semibold text-gray-800"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Thời lượng hoàn thành (Phút) *
+              </label>
+              <input
+                type="number"
+                min="1"
                 value={formData.durationMin}
-                onChange={(e) => handleChange("durationMin", e.target.value)}
-                className="w-full rounded-lg border border-gray-300 p-2.5 outline-none"
+                onChange={(e) =>
+                  handleInputChange("durationMin", e.target.value)
+                }
+                placeholder="Ví dụ: 30, 45, 60..."
+                className="w-full rounded-lg border border-gray-300 p-2.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium"
               />
             </div>
           </div>
         </div>
 
-        {/* CỘT PHẢI (5 cột): Quản lý kho ảnh album dịch vụ */}
-        <div className="lg:col-span-5 bg-gray-50/70 rounded-2xl p-4 border border-gray-100 flex flex-col min-h-[350px]">
-          <h4 className="text-sm font-black text-gray-800 uppercase tracking-wider pb-2 border-b border-gray-200 mb-3 flex items-center gap-1.5">
-            <Image size={16} className="text-blue-500" /> Album Hình Ảnh ({images.length})
-          </h4>
+        {/* ── Khối 2: Album Ảnh bằng URL (Chỉ hiển thị khi EDIT) ── */}
+        {isEdit && (
+          <div className="space-y-4 border-t border-gray-100 pt-4 relative">
+            {loadingImages && (
+              <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] flex items-center justify-center z-10">
+                <span className="text-xs font-semibold text-gray-500 flex items-center gap-2">
+                  <Loader2 size={14} className="animate-spin text-blue-500" />{" "}
+                  Đang đồng bộ ảnh dịch vụ...
+                </span>
+              </div>
+            )}
 
-          {!isEdit ? (
-            // Nếu thêm mới chưa có ID dịch vụ thì khóa tính năng ảnh lại
-            <div className="flex-grow flex flex-col items-center justify-center text-center p-6 bg-white rounded-xl border border-dashed border-gray-200 my-auto">
-              <Image size={32} className="text-gray-300 mb-2" />
-              <p className="text-xs font-bold text-gray-500">Chưa thể quản lý ảnh</p>
-              <p className="text-[11px] text-gray-400 max-w-[200px] mt-0.5">
-                Vui lòng tạo mới thông tin dịch vụ trước, sau đó bấm nút Sửa để quản lý ảnh album sau.
-              </p>
+            <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-800">
+              <Image size={16} className="text-blue-500" />
+              <span>Quản lý Album ảnh gói dịch vụ</span>
             </div>
-          ) : (
-            // Nếu sửa, kích hoạt module ảnh hoàn chỉnh
-            <div className="flex flex-col flex-grow space-y-3">
-              
-              {/* Form Input URL ảnh nhanh */}
-              <form onSubmit={handleAddImage} className="flex gap-1.5">
+
+            {/* Ô nhập liên kết ảnh URL */}
+            <form onSubmit={handleAddImageUrl} className="flex gap-2">
+              <div className="relative flex-grow">
+                <Link
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                />
                 <input
                   type="url"
-                  placeholder="Dán link ảnh URL vào đây..."
                   value={newImageUrl}
                   onChange={(e) => setNewImageUrl(e.target.value)}
-                  className="flex-grow text-xs rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-blue-500 bg-white"
+                  placeholder="Dán đường dẫn ảnh mạng URL vào đây... (Ví dụ: https://example.com/pet.png)"
+                  className="w-full text-xs rounded-lg border border-gray-300 pl-9 pr-3 py-2.5 outline-none focus:border-blue-500 bg-white"
                 />
-                <button
-                  type="submit"
-                  disabled={!newImageUrl.trim()}
-                  className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors flex items-center justify-center"
-                >
-                  <Plus size={16} />
-                </button>
-              </form>
+              </div>
+              <button
+                type="submit"
+                disabled={!newImageUrl.trim() || serviceImages.length >= 6}
+                className="px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 disabled:opacity-40 text-xs font-medium flex items-center gap-1.5 transition-colors shadow-sm"
+              >
+                <Plus size={14} /> Thêm ảnh
+              </button>
+            </form>
 
-              {/* Danh sách cuộn hiển thị lưới ảnh đang có */}
-              <div className="flex-grow overflow-y-auto max-h-[280px] pr-1 space-y-2 custom-scrollbar">
-                {loadingImages ? (
-                  <div className="h-40 flex items-center justify-center gap-2 text-xs text-gray-400 font-medium">
-                    <Loader2 className="animate-spin text-blue-500" size={16} />
-                    Đang tải danh sách ảnh...
-                  </div>
-                ) : images.length === 0 ? (
-                  <div className="text-center py-10 text-xs text-gray-400 font-medium bg-white rounded-xl border border-gray-100">
-                    Chưa có hình ảnh nào cho gói dịch vụ này.
-                  </div>
-                ) : (
-                  images.map((img) => (
-                    <div 
-                      key={img.id} 
-                      className={`flex items-center gap-3 p-2 bg-white rounded-xl border transition-all ${
-                        img.isThumbnail ? "border-blue-500 ring-1 ring-blue-100" : "border-gray-200"
+            <div>
+              <p className="text-xs text-gray-500 mb-2">
+                Ảnh hiện có ({serviceImages.length}/6){" "}
+                <span className="text-gray-400 font-normal ml-1">
+                  • Click chọn ảnh để đặt làm ảnh đại diện chính (Thumbnail)
+                </span>
+              </p>
+
+              {/* Grid danh sách ảnh URL */}
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                {serviceImages.map((img) => {
+                  const isMain = img.isThumbnail || img.isMain;
+                  const currentImgUrl = img.imageUrl || img.url;
+                  return (
+                    <div
+                      key={img.id}
+                      className={`relative group aspect-square rounded-xl border overflow-hidden cursor-pointer transition-all ${
+                        isMain
+                          ? "border-blue-500 ring-2 ring-blue-400/30 shadow-sm"
+                          : "border-gray-200 hover:border-gray-300"
                       }`}
                     >
-                      {/* Ảnh nhỏ xem trước (Preview) */}
-                      <img 
-                        src={img.imageUrl} 
-                        alt="Service asset" 
-                        className="w-12 h-12 object-cover rounded-lg bg-gray-50 border border-gray-100 flex-shrink-0" 
+                      <img
+                        src={currentImgUrl}
+                        alt={`gallery-${img.id}`}
+                        className="w-full h-full object-cover bg-gray-50"
+                        onClick={() => handleSetMainImage(img.id)}
+                        title="Click để thiết lập làm ảnh đại diện chính"
+                        onError={(e) => {
+                          e.target.src =
+                            "https://placehold.co/300x300?text=L%E1%BB%97i+Link+%E1%BA%A2nh";
+                        }}
                       />
 
-                      {/* URL ẩn bớt */}
-                      <span className="text-[11px] text-gray-400 font-mono truncate flex-grow">
-                        {img.imageUrl}
-                      </span>
+                      {isMain && (
+                        <span className="absolute bottom-1 left-1 bg-blue-600 text-white text-[9px] px-1.5 py-0.5 rounded font-bold shadow flex items-center gap-0.5">
+                          <Check size={8} strokeWidth={4} /> Chính
+                        </span>
+                      )}
 
-                      {/* Các nút hành động trên ảnh */}
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        {/* Nút đặt ảnh chính */}
-                        <button
-                          type="button"
-                          onClick={() => handleSetThumbnail(img.id)}
-                          title={img.isThumbnail ? "Ảnh đại diện hiện tại" : "Đặt làm ảnh đại diện"}
-                          className={`p-1.5 rounded-md border transition-all ${
-                            img.isThumbnail 
-                              ? "bg-blue-50 border-blue-200 text-blue-600 font-bold" 
-                              : "bg-gray-50 border-gray-200 text-gray-400 hover:text-blue-500"
-                          }`}
-                        >
-                          <Check size={14} className={img.isThumbnail ? "stroke-[3px]" : ""} />
-                        </button>
-                        
-                        {/* Nút xóa ảnh */}
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteImage(img.id)}
-                          title="Xóa hình ảnh này"
-                          className="p-1.5 bg-gray-50 border border-gray-200 text-gray-400 hover:text-red-500 hover:bg-red-50 hover:border-red-200 rounded-md transition-all"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveImage(img.id);
+                        }}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow hover:bg-red-600"
+                        title="Gỡ ảnh này"
+                      >
+                        ×
+                      </button>
                     </div>
-                  ))
-                )}
+                  );
+                })}
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* FOOTER ACTIONS MODAL */}
-      <div className="flex items-center justify-end space-x-3 pt-4 mt-6 border-t border-gray-100 sticky bottom-0 bg-white z-10">
+      {/* ── Khối 3: Các nút bấm điều hướng Footer ── */}
+      <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
         <button
           type="button"
           onClick={onClose}
-          disabled={submitting}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
         >
           Hủy bỏ
         </button>
         <button
           type="button"
-          onClick={handleSubmit}
-          disabled={submitting}
-          className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-blue-400 flex items-center gap-2"
+          onClick={handleValidationAndSubmit}
+          className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm"
         >
-          {submitting ? (
-            <>
-              <Loader2 className="animate-spin h-4 w-4 text-white" />
-              <span>Đang lưu dữ liệu...</span>
-            </>
-          ) : isEdit ? (
-            "Lưu thay đổi"
-          ) : (
-            "Tạo dịch vụ"
-          )}
+          {isEdit ? "Cập nhật dịch vụ" : "Tạo dịch vụ mới"}
         </button>
       </div>
-    </Modal>
+    </div>
   );
 };
 

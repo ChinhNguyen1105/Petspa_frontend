@@ -261,6 +261,7 @@ const updateProduct = async (
   productData,
   options = {}
 ) => {
+
   if (shouldUseApi(options)) {
     const resp = await api.put(
       URL_CONSTANT.Product.UPDATE_PRODUCT,

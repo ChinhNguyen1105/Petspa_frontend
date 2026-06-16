@@ -20,23 +20,26 @@ import { useCartStore } from '../../../store/cartStore';
 import { useProductStore } from '../../../store/productStore';
 import { useCategoryStore } from '../../../store/categoryStore';
 
-
 const ProductManagement = () => {
   // ── Store: Products & Pagination ──
   const products        = useProductStore((state) => state.products) || [];
-  const meta            = useProductStore((state) => state.meta);
+  const meta              = useProductStore((state) => state.meta);
   const loadingProducts = useProductStore((state) => state.loading);
   const errorProducts   = useProductStore((state) => state.error);
   
   const fetchProducts   = useProductStore((state) => state.fetchProducts);
+  const deleteProduct   = useProductStore((state) => state.deleteProduct);
+  
   const createProduct   = useProductStore((state) => state.createProduct);
   const updateProduct   = useProductStore((state) => state.updateProduct);
-  const deleteProduct   = useProductStore((state) => state.deleteProduct);
 
-  // ── Store: Categories ──
-  const storeCategories   = useCategoryStore((state) => state.categories);
+  // ── Store: Categories (Bộ lọc ngoài) ──
+  const storeCategories   = useCategoryStore((state) => state.categories) || [];
   const fetchCategories   = useCategoryStore((state) => state.fetchCategories);
   const loadingCategories = useCategoryStore((state) => state.loading);
+
+  // ── Store: Global Toast ──
+  const showToast = useCartStore((state) => state.showToast);
 
   // ── LOCAL UI STATE ──
   const [searchTerm, setSearchTerm]         = useState('');
@@ -45,7 +48,6 @@ const ProductManagement = () => {
 
   // Modals state
   const [isModalOpen, setIsModalOpen]         = useState(false);
-  const [modalType, setModalType]             = useState('CREATE');
   const [selectedProduct, setSelectedProduct] = useState(null);
 
   const [confirmModal, setConfirmModal] = useState({
@@ -56,14 +58,12 @@ const ProductManagement = () => {
     pendingData: null,
   });
 
-  const showToast = useCartStore((state) => state.showToast);
-
-  // Tải danh mục ban đầu
+  // Tải danh mục sản phẩm phục vụ bộ lọc ngoài
   useEffect(() => {
     fetchCategories({ type: "PRODUCT" });
   }, [fetchCategories]);
 
-  // FETCH DATA: Gom toàn bộ logic lắng nghe thay đổi vào đây
+  // Lấy danh sách sản phẩm theo bộ lọc
   useEffect(() => {
     fetchProducts({
       page: currentPage,
@@ -72,42 +72,68 @@ const ProductManagement = () => {
     });
   }, [currentPage, searchTerm, selectedCategory, fetchProducts]);
 
-  // ── Sửa bộ lắng nghe onChange để reset trang chủ động (Bỏ Effect phụ) ──
+  // ── SỬA ĐỔI CHÍNH: Chỉ map các danh mục có thuộc tính categoryType / type là 'PRODUCT' ──
+  const categoriesOptions = [
+    { value: 0, label: 'Tất cả sản phẩm' },
+    ...storeCategories
+      .filter((c) => c.categoryType === 'PRODUCT' || c.type === 'PRODUCT') // Đảm bảo an toàn cả 2 trường hợp đặt tên field từ API
+      .map((c) => ({
+        value: c.id,
+        label: c.name,
+      })),
+  ];
+
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
-    setCurrentPage(1); // Reset ngay khi gõ
+    setCurrentPage(1); 
   };
 
   const handleCategoryChange = (e) => {
     setSelectedCategory(Number(e.target.value));
-    setCurrentPage(1); // Reset ngay khi chọn danh mục khác
+    setCurrentPage(1); 
   };
 
-  // Mapping Options
-  const categoriesOptions = [
-    { value: 0, label: 'Tất cả sản phẩm' },
-    ...storeCategories.map((c) => ({
-      value: c.id,
-      label: c.name,
-    })),
-  ];
-
-  const formCategories = storeCategories.map((c) => ({
-    value: c.id,
-    label: c.name,
-  }));
-
-  // Handlers: Modals
   const handleOpenCreateModal = () => {
-    setModalType('CREATE');
     setSelectedProduct(null);
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (product) => {
-    setModalType('EDIT');
     setSelectedProduct(product);
     setIsModalOpen(true);
+  };
+
+  const handleFormSubmit = async (payload) => {
+    const isCreateMode = !selectedProduct;
+    try {
+      let res;
+      if (isCreateMode) {
+        res = await createProduct(payload);
+      } else {
+        res = await updateProduct(payload.id, payload);
+      }
+
+      if (res || res?.success) {
+        setIsModalOpen(false);
+        
+        if (isCreateMode) {
+          showToast('Thêm mới sản phẩm thành công! 🎉', 'success');
+          setCurrentPage(1); 
+        } else {
+          showToast(`Cập nhật thông tin sản phẩm thành công! 💾`, 'success');
+          fetchProducts({ 
+            page: currentPage, 
+            keyword: searchTerm.trim(), 
+            categoryId: selectedCategory === 0 ? undefined : selectedCategory 
+          });
+        }
+      } else {
+        showToast('Xử lý dữ liệu thất bại. Vui lòng kiểm tra lại thông tin.', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Đã xảy ra lỗi hệ thống trong lúc truyền tải dữ liệu.', 'error');
+    }
   };
 
   const handleCancelForm = () => {
@@ -120,64 +146,6 @@ const ProductManagement = () => {
     });
   };
 
-  const handleFormSubmit = (formOutputData) => {
-    if (modalType === 'EDIT') {
-      setConfirmModal({
-        isOpen: true,
-        type: 'CONFIRM_UPDATE',
-        title: 'Xác nhận cập nhật',
-        message: `Bạn có chắc chắn muốn cập nhật thay đổi cho sản phẩm "${formOutputData.name}"?`,
-        pendingData: formOutputData,
-      });
-    } else {
-      executeSaveProduct(formOutputData);
-    }
-  };
-
-  const executeSaveProduct = async (formOutputData) => {
-    try {
-      const catIdParsed = Number(formOutputData.categoryId);
-      const catMatch = storeCategories.find((c) => c.id === catIdParsed);
-      
-      const mappedPayload = {
-        name:          formOutputData.name,
-        price:         Number(formOutputData.price), // Ép kiểu số cho an toàn với API thật
-        stockQuantity: Number(formOutputData.stockQuantity ?? formOutputData.stock ?? 0),
-        categoryId:    catIdParsed,
-        categoryName:  catMatch ? catMatch.name : '',
-        thumbnailUrl:  formOutputData.thumbnailUrl ?? formOutputData.image ?? '',
-        description:   formOutputData.description || '',
-        activeFlag:    true,
-      };
-
-      if (modalType === 'CREATE') {
-        const result = await createProduct(mappedPayload);
-        if (result?.success) {
-          showToast('Thêm sản phẩm mới thành công!', 'success');
-          setCurrentPage(1); // Tạo xong thì nên đưa người dùng về trang 1 để xem sản phẩm mới nhất
-        } else {
-          showToast('Đã xảy ra lỗi khi thêm sản phẩm.', 'error');
-        }
-      } else {
-        const result = await updateProduct(selectedProduct.id, mappedPayload);
-        if (result?.success) {
-          showToast('Cập nhật thông tin sản phẩm thành công!', 'success');
-          // Giữ nguyên trang hiện tại để họ kiểm tra dòng dữ liệu vừa sửa
-          fetchProducts({ page: currentPage, keyword: searchTerm.trim(), categoryId: selectedCategory === 0 ? undefined : selectedCategory });
-        } else {
-          showToast('Đã xảy ra lỗi khi cập nhật sản phẩm.', 'error');
-        }
-      }
-
-      setIsModalOpen(false);
-      closeConfirmModal();
-    } catch (err) {
-      console.error('Gặp lỗi khi xử lý dữ liệu:', err);
-      showToast('Đã xảy ra lỗi hệ thống.', 'error');
-    }
-  };
-
-  // Handlers: Xóa sản phẩm
   const handleConfirmDelete = (productId, productName) => {
     setConfirmModal({
       isOpen: true,
@@ -193,15 +161,18 @@ const ProductManagement = () => {
     try {
       const result = await deleteProduct(id);
       if (result?.success) {
-        showToast(`Đã xóa sản phẩm "${name}" thành công!`, 'success');
-        // Sau khi xóa, gọi lại danh sách hiện tại
-        fetchProducts({ page: currentPage, keyword: searchTerm.trim(), categoryId: selectedCategory === 0 ? undefined : selectedCategory });
+        showToast(`Đã xóa sản phẩm "${name}" thành công! 🗑️`, 'success');
+        fetchProducts({ 
+          page: currentPage, 
+          keyword: searchTerm.trim(), 
+          categoryId: selectedCategory === 0 ? undefined : selectedCategory 
+        });
       } else {
         showToast('Không thể xóa sản phẩm vào lúc này.', 'error');
       }
       closeConfirmModal();
     } catch (err) {
-      console.error('Lỗi khi xóa:', err);
+      console.error(err);
       showToast('Đã xảy ra lỗi khi tiến hành xóa.', 'error');
     }
   };
@@ -211,9 +182,6 @@ const ProductManagement = () => {
       case 'CANCEL_FORM':
         setIsModalOpen(false);
         closeConfirmModal();
-        break;
-      case 'CONFIRM_UPDATE':
-        executeSaveProduct(confirmModal.pendingData);
         break;
       case 'CONFIRM_DELETE':
         executeDeleteProduct();
@@ -265,15 +233,15 @@ const ProductManagement = () => {
             type="text"
             placeholder="Tìm theo tên sản phẩm..."
             value={searchTerm}
-            onChange={handleSearchChange} // Dùng hàm handle mới tối ưu
+            onChange={handleSearchChange}
             className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 text-gray-700"
           />
         </div>
         <select
           value={selectedCategory}
-          onChange={handleCategoryChange} // Dùng hàm handle mới tối ưu
+          onChange={handleCategoryChange}
           disabled={loadingCategories}
-          className="w-full sm:w-52 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 focus:outline-none disabled:opacity-50"
+          className="w-full sm:w-52 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 focus:outline-none focus:border-orange-500 disabled:opacity-50"
         >
           {categoriesOptions.map((cat) => (
             <option key={cat.value} value={cat.value}>{cat.label}</option>
@@ -306,25 +274,33 @@ const ProductManagement = () => {
                 <tr>
                   <td colSpan="6" className="p-12 text-center text-gray-400">
                     <Package size={36} className="mx-auto mb-2 text-gray-300" />
-                    Không tìm thấy sản phẩm.
+                    Không tìm thấy sản phẩm nào trùng khớp.
                   </td>
                 </tr>
               ) : (
                 products.map((product) => (
                   <tr key={product.id} className="hover:bg-gray-50/50 transition-colors group">
                     <td className="p-4 text-center">
-                      <div className="w-14 h-14 bg-gray-100 rounded-xl overflow-hidden border flex items-center justify-center mx-auto">
+                      <div className="w-14 h-14 bg-gray-100 rounded-xl overflow-hidden border border-gray-200 flex items-center justify-center mx-auto group-hover:scale-105 transition-transform duration-200 shadow-sm">
                         {product.thumbnailUrl ? (
-                          <img src={product.thumbnailUrl} alt={product.name} className="w-full h-full object-cover" />
+                          <img 
+                            src={product.thumbnailUrl} 
+                            alt={product.name} 
+                            className="w-full h-full object-cover" 
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = "https://placehold.co/150x150?text=No+Image";
+                            }}
+                          />
                         ) : (
                           <Package size={20} className="text-gray-400" />
                         )}
                       </div>
                     </td>
                     <td className="p-4">
-                      <div className="font-bold text-gray-800 text-base">{product.name}</div>
-                      <div className="text-xs font-mono text-gray-400">
-                        Mã định danh: <span className="font-bold text-blue-600">ID - {product.id}</span>
+                      <div className="font-bold text-gray-800 text-base group-hover:text-orange-500 transition-colors">{product.name}</div>
+                      <div className="text-xs font-mono text-gray-400 mt-0.5">
+                        Mã định danh: <span className="font-bold text-blue-600">ID - #{product.id}</span>
                       </div>
                     </td>
                     <td className="p-4">
@@ -340,12 +316,14 @@ const ProductManagement = () => {
                         <button
                           onClick={() => handleOpenEditModal(product)}
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl border border-transparent hover:border-blue-200 transition-all"
+                          title="Sửa sản phẩm"
                         >
                           <Edit2 size={16} />
                         </button>
                         <button
                           onClick={() => handleConfirmDelete(product.id, product.name)}
                           className="p-2 text-red-500 hover:bg-red-50 rounded-xl border border-transparent hover:border-red-200 transition-all"
+                          title="Xóa sản phẩm"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -370,22 +348,21 @@ const ProductManagement = () => {
         )}
       </div>
 
-      {/* Modal 1: Form tạo / chỉnh sửa */}
+      {/* Modal Popup chứa Form */}
       <Modal
         isOpen={isModalOpen}
         onClose={handleCancelForm}
-        title={modalType === 'CREATE' ? 'Thêm sản phẩm mới' : 'Chỉnh sửa sản phẩm'}
+        title={selectedProduct ? 'Chỉnh sửa thông tin sản phẩm' : 'Thêm sản phẩm mới'}
         size="lg"
       >
-        <ProductFormAdmin
-          categories={formCategories}
-          initialData={selectedProduct}
-          onSubmit={handleFormSubmit}
-          onClose={handleCancelForm}
+        <ProductFormAdmin 
+          initialData={selectedProduct} 
+          onSubmit={handleFormSubmit} 
+          onClose={handleCancelForm} 
         />
       </Modal>
 
-      {/* Modal 2: Xác nhận hành động */}
+      {/* Modal Xác nhận */}
       <ConfirmModal
         isOpen={confirmModal.isOpen}
         onClose={closeConfirmModal}

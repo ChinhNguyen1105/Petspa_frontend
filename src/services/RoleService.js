@@ -1,17 +1,12 @@
 import api from "./api";
 import { APP_CONFIG } from "./config";
-
-import permissionsMock from "../assets/data/mocks/auth/permissionMock";
-import { roleMock } from "../assets/data/mocks/auth/roleMock";
+import { URL_CONSTANT } from "../constants/urlConstant";
 
 const delay = (ms) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+  new Promise((resolve) =>
+    setTimeout(resolve, ms)
+  );
 
-/*
-|--------------------------------------------------------------------------
-| CONFIG
-|--------------------------------------------------------------------------
-*/
 let useApi = APP_CONFIG.USE_REAL_API;
 
 const setApi = (flag) => {
@@ -25,97 +20,189 @@ const shouldUseApi = (options = {}) =>
 
 /*
 |--------------------------------------------------------------------------
-| PERMISSIONS
+| MAPPER
 |--------------------------------------------------------------------------
 */
-const getAllPermissions = async (
-  options = {}
-) => {
-  if (shouldUseApi(options)) {
-    const resp = await api.get(
-      "/permissions"
-    );
+const mapRoleRequest = (
+  request
+) => ({
+  id: request.id,
 
-    return resp.data;
-  }
+  name: request.name,
 
-  await delay(300);
+  description:
+    request.description,
 
-  return permissionsMock;
-};
+  permissions:
+    request.permissions?.map(
+      (permission) => ({
+        id:
+          permission.id ??
+          permission,
+      })
+    ) || [],
+});
 
 /*
 |--------------------------------------------------------------------------
-| ROLES
+| CREATE
 |--------------------------------------------------------------------------
 */
-const getAllRoles = async (
+const createRole = async (
+  request,
   options = {}
 ) => {
+  const payload =
+    mapRoleRequest(request);
+
+  delete payload.id;
+
   if (shouldUseApi(options)) {
-    const resp = await api.get(
-      "/roles"
+    const resp = await api.post(
+      URL_CONSTANT.Role.CREATE_ROLE,
+      payload
     );
 
     return resp.data;
   }
 
-  await delay(300);
-
-  return roleMock;
-};
-
-/*
-|--------------------------------------------------------------------------
-| UPDATE ROLE PERMISSIONS
-|--------------------------------------------------------------------------
-*/
-const updateRolePermissions = async (
-  roleId,
-  permissionIds,
-  options = {}
-) => {
-  if (shouldUseApi(options)) {
-    const resp = await api.put(
-      `/roles/${roleId}/permissions`,
-      {
-        permissionIds,
-      }
-    );
-
-    return resp.data;
-  }
-
-  await delay(300);
-
-  const targetRole =
-    roleMock.data.find(
-      (role) =>
-        String(role.id) ===
-        String(roleId)
-    );
-
-  if (targetRole) {
-    targetRole.permissionIds =
-      permissionIds;
-  }
+  await delay(500);
 
   return {
-    success: true,
-    message:
-      "Update role permissions successfully",
-    data: {
-      roleId,
-      permissionIds,
-    },
+    id: Date.now(),
+    ...payload,
   };
 };
 
-export default {
+/*
+|--------------------------------------------------------------------------
+| UPDATE
+|--------------------------------------------------------------------------
+*/
+const updateRole = async (
+  request,
+  options = {}
+) => {
+  const payload =
+    mapRoleRequest(request);
+
+  if (shouldUseApi(options)) {
+    const resp = await api.put(
+      URL_CONSTANT.Role.UPDATE_ROLE,
+      payload
+    );
+
+    return resp.data;
+  }
+
+  await delay(500);
+
+  return payload;
+};
+
+/*
+|--------------------------------------------------------------------------
+| GET ALL
+|--------------------------------------------------------------------------
+*/
+const getRoles = async (
+  params = {},
+  options = {}
+) => {
+  if (shouldUseApi(options)) {
+    const resp = await api.get(
+      URL_CONSTANT.Role.GET_ALL_ROLES,
+      {
+        params,
+      }
+    );
+    console.log("all role = ", resp);
+    return resp.data;
+  }
+
+  await delay(500);
+
+  return {
+    meta: {
+      page: 1,
+      pageSize: 10,
+      pages: 1,
+      total: 0,
+    },
+    result: [],
+  };
+};
+
+/*
+|--------------------------------------------------------------------------
+| DETAIL
+|--------------------------------------------------------------------------
+*/
+const getRoleById = async (
+  id,
+  options = {}
+) => {
+  if (shouldUseApi(options)) {
+    const resp = await api.get(
+      URL_CONSTANT.Role.GET_ROLE_BY_ID.replace(
+        "{id}",
+        id
+      )
+    );
+
+    return resp.data;
+  }
+
+  await delay(500);
+
+  return {
+    id,
+    name: "",
+    description: "",
+    activeFlag: true,
+    permissions: [],
+  };
+};
+
+/*
+|--------------------------------------------------------------------------
+| DELETE
+|--------------------------------------------------------------------------
+*/
+const deleteRole = async (
+  id,
+  options = {}
+) => {
+  if (shouldUseApi(options)) {
+    const resp = await api.delete(
+      URL_CONSTANT.Role.DELETE_ROLE.replace(
+        "{id}",
+        id
+      )
+    );
+
+    return resp.data;
+  }
+
+  await delay(500);
+
+  return {
+    status: true,
+    message:
+      "Delete role successfully",
+  };
+};
+
+const RoleService = {
   setApi,
 
-  getAllPermissions,
+  createRole,
+  updateRole,
 
-  getAllRoles,
-  updateRolePermissions,
+  getRoles,
+  getRoleById,
+
+  deleteRole,
 };
+
+export default RoleService;

@@ -1,317 +1,366 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Plus, Search, Edit2, Trash2, AlertCircle, 
-  RefreshCw, Scissors, ChevronRight, Clock, Star
+  Search, 
+  Edit2, 
+  Trash2, 
+  ChevronRight,
+  Eye,
+  Package,
+  Plus,
+  Layers,
+  Clock,
+  DollarSign
 } from 'lucide-react';
 import Loading from '../../../components/common/Loading';
+import { formatPrice } from '../../../utils/formatPrice';
+import { formatDate } from '../../../utils/formatDate';
+import Modal from '../../../components/common/Modal'; 
 import ConfirmModal from '../../../components/common/ConfirmModal';
-import Pagination from '../../../components/common/Pagination';
-import ServiceFormAdmin from '../../../components/form/ServiceFormAdmin';
-
 import { useCartStore } from '../../../store/cartStore';
-import { useServiceStore } from '../../../store/serviceStore';
-import { useCategoryStore } from '../../../store/categoryStore';
+import Pagination from '../../../components/common/Pagination';
 
-const PAGE_SIZE = 10;
+import { useServiceStore } from '../../../store/serviceStore'; 
+import { useCategoryStore } from '../../../store/categoryStore'; 
+import ServiceFormAdmin from '../../../components/form/ServiceFormAdmin'; 
 
+// ==========================================
+// MAIN MANAGEMENT COMPONENT
+// ==========================================
 const ServiceManagement = () => {
-  // ── Store: Services ──
-  const services       = useServiceStore((state) => state.services) || [];
-  const meta           = useServiceStore((state) => state.meta);
-  const serviceLoading = useServiceStore((state) => state.loading);
-  const fetchServices  = useServiceStore((state) => state.fetchServices);
-  const createService  = useServiceStore((state) => state.createService);
-  const updateService  = useServiceStore((state) => state.updateService);
-  const deleteService  = useServiceStore((state) => state.deleteService);
+  // --- TẬN DỤNG TRẠNG THÁI VÀ ACTIONS TỪ SERVICE STORE ---
+  const services          = useServiceStore((state) => state.services) || [];
+  const meta              = useServiceStore((state) => state.meta); 
+  const serviceLoading    = useServiceStore((state) => state.loading);
+  const errorStore        = useServiceStore((state) => state.error);
+  const fetchServices     = useServiceStore((state) => state.fetchServices);
+  const createService     = useServiceStore((state) => state.createService);
+  const updateService     = useServiceStore((state) => state.updateService);
+  const deleteService     = useServiceStore((state) => state.deleteService);
 
-  // ── Store: Categories ──
+  const setStoreState = useServiceStore.setState;
+
+  // --- TẬN DỤNG DANH MỤC TỪ CATEGORY STORE ---
   const categories      = useCategoryStore((state) => state.categories) || [];
-  const categoryLoading = useCategoryStore((state) => state.loading);
   const fetchCategories = useCategoryStore((state) => state.fetchCategories);
+  const categoryLoading = useCategoryStore((state) => state.loading);
 
-  const showToast = useCartStore((state) => state.showToast);
-
-  // ── Local UI state ──
+  // ─── LOCAL UI STATE ────────────────────────────────────────────────────────
   const [searchTerm, setSearchTerm]         = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [currentPage, setCurrentPage]       = useState(1);
 
+  // Điều khiển Main Modal
   const [isModalOpen, setIsModalOpen]       = useState(false);
+  const [modalType, setModalType]           = useState('VIEW'); // 'VIEW', 'EDIT', 'CREATE'
   const [selectedService, setSelectedService] = useState(null);
 
-  const [confirmDelete, setConfirmDelete]   = useState({ isOpen: false, id: null, name: '' });
-  const [error, setError]                   = useState(null);
+  // Điều khiển Modal xác nhận
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    type: '', // 'CANCEL_FORM', 'CONFIRM_UPDATE', 'CONFIRM_SAVE_FORM', 'CONFIRM_DELETE'
+    title: '',
+    message: '',
+    pendingData: null
+  });
 
-  // Helper hàm trigger load lại danh sách dịch vụ để tránh lặp code và giữ vững đồng bộ
-  const loadServicesList = React.useCallback(async () => {
-    try {
-      await fetchServices({
-        page:       currentPage,
-        pageSize:   PAGE_SIZE,
-        keyword:    searchTerm.trim() || undefined,
-        categoryId: selectedCategory !== 'ALL' ? Number(selectedCategory) : undefined,
-      });
-    } catch (err) {
-      setError('Không thể tải danh sách dữ liệu dịch vụ.');
-    }
-  }, [currentPage, searchTerm, selectedCategory, fetchServices]);
+  const showToast = useCartStore((state) => state.showToast);
 
-  // ── Fetch danh mục dịch vụ — chỉ 1 lần khi mount ──
+  // ─── FETCH DỮ LIỆU ĐẦU KỲ / PHÂN TRANG ──────────────────────────────────────
+  const handleReloadData = React.useCallback(() => {
+    fetchServices({ 
+      page: currentPage, 
+      search: searchTerm.trim() 
+    });
+  }, [currentPage, searchTerm, fetchServices]);
+
+  useEffect(() => {
+    handleReloadData();
+  }, [handleReloadData]);
+
+  // Fetch danh sách Categories từ API đầu kỳ để làm bộ lọc
   useEffect(() => {
     fetchCategories({ type: 'SERVICE' });
   }, [fetchCategories]);
-  
-  // ── Fetch danh sách dịch vụ — chạy lại khi filter/page thay đổi ──
+
+  // Reset về trang 1 khi từ khóa hoặc danh mục thay đổi
   useEffect(() => {
-    setError(null);
-    loadServicesList();
-  }, [loadServicesList]);
-
-  // ── Handlers: Filter ──
-  const handleSearchChange = (e) => {
-    setSearchTerm(e.target.value);
     setCurrentPage(1);
-  };
+  }, [searchTerm, selectedCategory]);
 
-  const handleCategoryChange = (e) => {
-    setSelectedCategory(e.target.value);
-    setCurrentPage(1);
-  };
+  // ─── LOGIC LỌC DỮ LIỆU FRONTEND (TÌM KIẾM & CATEGORY) ───────────────────────
+  const filteredServices = services.filter((item) => {
+    // 1. Lọc theo danh mục bộ chọn
+    if (selectedCategory !== 'ALL' && item.categoryName !== selectedCategory) {
+      return false;
+    }
 
-  // ── Handlers: Modal ──
-  const openAddModal = () => {
+    // 2. Lọc theo từ khóa tìm kiếm (Tên gói, mô tả, hoặc danh mục)
+    if (searchTerm.trim() !== '') {
+      const searchLower = searchTerm.toLowerCase();
+      const matchName = item.name?.toLowerCase().includes(searchLower);
+      const matchDesc = item.description?.toLowerCase().includes(searchLower);
+      const matchCat  = item.categoryName?.toLowerCase().includes(searchLower);
+      
+      return matchName || matchDesc || matchCat;
+    }
+
+    return true;
+  });
+
+  // ─── MODAL HANDLERS ────────────────────────────────────────────────────────
+  const handleOpenCreateModal = () => {
+    setModalType('CREATE');
     setSelectedService(null);
     setIsModalOpen(true);
   };
 
-  const openEditModal = (service) => {
+  const handleOpenEditModal = (service) => {
+    setModalType('EDIT');
     setSelectedService(service);
     setIsModalOpen(true);
   };
 
-  // ── Handlers: Save thành công từ Form Child ──
-  // Do form đã tự xử lý gọi API createService/updateService bên trong nó và trả ra vùng dữ liệu sạch res.data, 
-  // component cha ở đây chỉ nhận data sạch để thông báo hiển thị và đồng bộ lại danh sách.
-  const handleSaveSuccess = (savedData) => {
-    const isEdit = !!selectedService;
-    
-    if (isEdit) {
-      showToast('Cập nhật gói dịch vụ thành công!', 'success');
-      loadServicesList(); // Reload giữ nguyên trang để kiểm tra kết quả vừa sửa
+  const handleOpenViewModal = (service) => {
+    setModalType('VIEW');
+    setSelectedService(service);
+    setIsModalOpen(true);
+  };
+
+  const handleFormSubmit = (formOutputData) => {
+    if (modalType === 'EDIT') {
+      setConfirmModal({
+        isOpen: true,
+        type: 'CONFIRM_UPDATE',
+        title: 'Cập nhật dịch vụ',
+        message: `Hành động này sẽ thay đổi thông tin của gói dịch vụ: ${formOutputData.name}. Bạn chắc chắn chứ?`,
+        pendingData: formOutputData
+      });
     } else {
-      showToast('Thêm dịch vụ mới thành công!', 'success');
-      setCurrentPage(1); // Ép về trang 1 nhìn thấy bản ghi mới tinh vừa tạo ở đầu
+      setConfirmModal({
+        isOpen: true,
+        type: 'CONFIRM_SAVE_FORM',
+        title: 'Tạo dịch vụ mới',
+        message: 'Bạn có chắc chắn muốn thêm gói dịch vụ mới này vào hệ thống?',
+        pendingData: formOutputData
+      });
     }
   };
 
-  // ── Handlers: Delete ──
-  const executeDelete = async () => {
-    const res = await deleteService(confirmDelete.id);
-    if (res?.success) {
-      showToast(`Xóa dịch vụ "${confirmDelete.name}" thành công!`, 'success');
-      const isLastItemOnPage = services.length === 1 && currentPage > 1;
-      setCurrentPage((prev) => (isLastItemOnPage ? prev - 1 : prev));
-      if (!isLastItemOnPage) {
-        loadServicesList();
+  const executeSaveService = async () => {
+    const formOutputData = confirmModal.pendingData;
+    try {
+      if (modalType === 'CREATE') {
+        const res = await createService(formOutputData);
+        if (res?.success !== false) {
+          showToast('Thêm gói dịch vụ mới thành công! ', 'success');
+          handleReloadData();
+          setIsModalOpen(false);
+        } else {
+          showToast(res?.message || 'Gặp sự cố khi thêm dịch vụ.', 'error');
+        }
+      } else {
+        const res = await updateService(selectedService.id, formOutputData);
+        if (res?.success !== false) {
+          setStoreState((state) => ({
+            services: state.services.map(s => s.id === selectedService.id ? { ...s, ...formOutputData } : s)
+          }));
+          showToast(`Đã lưu thay đổi cho gói dịch vụ #${selectedService.id} thành công! `, 'success');
+          handleReloadData();
+          setIsModalOpen(false);
+        } else {
+          showToast(res?.message || 'Gặp sự cố khi cập nhật dịch vụ.', 'error');
+        }
       }
-    } else {
-      showToast(res?.message || 'Xóa thất bại, dịch vụ đang có lịch đặt của khách.', 'error');
+      closeConfirmModal();
+    } catch (err) {
+      console.error(err);
+      showToast('Gặp sự cố khi kết nối hệ thống để xử lý dữ liệu.', 'error');
     }
-    setConfirmDelete({ isOpen: false, id: null, name: '' });
   };
 
-  const isGlobalLoading = serviceLoading || categoryLoading;
+  const handleCancelForm = () => {
+    if (modalType === 'VIEW') {
+      setIsModalOpen(false);
+      return;
+    }
+    setConfirmModal({
+      isOpen: true,
+      type: 'CANCEL_FORM',
+      title: 'Hủy bỏ thao tác?',
+      message: 'Những thay đổi bạn vừa nhập trên Form sẽ không được lưu. Bạn vẫn muốn thoát chứ?',
+      pendingData: null
+    });
+  };
 
-  // ── Error State ──
-  if (error) return (
-    <div className="flex flex-col h-[50vh] items-center justify-center space-y-4 text-center p-6">
-      <div className="p-4 bg-red-50 text-red-500 rounded-full"><AlertCircle size={40} /></div>
-      <p className="text-gray-600 font-medium">{error}</p>
-      <button
-        onClick={() => { setError(null); setCurrentPage(1); loadServicesList(); }}
-        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-bold"
-      >
-        <RefreshCw size={16} /> Thử lại
-      </button>
-    </div>
-  );
+  const handleConfirmDelete = (serviceId, serviceName) => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'CONFIRM_DELETE',
+      title: 'Xóa dịch vụ vĩnh viễn',
+      message: `Hành động này sẽ thực hiện xóa bỏ gói [${serviceName}] ra khỏi hệ thống hiển thị.`,
+      pendingData: { id: serviceId }
+    });
+  };
+
+  const executeDeleteService = async () => {
+    const { id } = confirmModal.pendingData;
+    try {
+      const res = await deleteService(id);
+      if (res?.success !== false) {
+        showToast(`Đã gỡ bỏ gói dịch vụ thành công khỏi hệ thống! `, 'success');
+        handleReloadData();
+      } else {
+        showToast(res?.message || 'Xảy ra lỗi khi thực thi xóa dịch vụ.', 'error');
+      }
+      closeConfirmModal();
+    } catch (err) {
+      showToast('Xảy ra lỗi khi thực thi xóa.', 'error');
+    }
+  };
+
+  const handleConfirmAction = () => {
+    switch (confirmModal.type) {
+      case 'CANCEL_FORM':     setIsModalOpen(false); closeConfirmModal(); break;
+      case 'CONFIRM_SAVE_FORM':
+      case 'CONFIRM_UPDATE':  executeSaveService(); break;
+      case 'CONFIRM_DELETE':  executeDeleteService(); break;
+      default: closeConfirmModal();
+    }
+  };
+
+  const closeConfirmModal = () => {
+    setConfirmModal({ isOpen: false, type: '', title: '', message: '', pendingData: null });
+  };
+
+  // Chỉ hiển thị Loading màn hình lớn khi danh sách dịch vụ đang tải lần đầu
+  if (serviceLoading && services.length === 0) return <div className="flex h-[60vh] items-center justify-center"><Loading size="large" /></div>;
+  if (errorStore) return <div className="text-center p-6 text-red-500">{errorStore}</div>;
 
   return (
     <div className="p-6 space-y-6 bg-gray-50 min-h-screen">
-
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 text-left">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
-            <span>Quản lý Spa</span>
-            <ChevronRight size={12} />
-            <span className="text-orange-500">Gói Dịch Vụ</span>
+            <span>Quản lý cửa hàng</span><ChevronRight size={12} /><span className="text-orange-500">Dịch vụ Spa</span>
           </div>
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight">DANH SÁCH DỊCH VỤ</h1>
+          <h1 className="text-3xl font-black text-slate-800 tracking-tight">QUẢN LÝ DỊCH VỤ</h1>
         </div>
-        <button
-          onClick={openAddModal}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-opacity-90 text-white font-bold rounded-xl shadow-sm text-sm transition-all active:scale-95"
-        >
-          <Plus size={18} /> Thêm Dịch Vụ Mới
+        <button onClick={handleOpenCreateModal} className="flex items-center justify-center gap-2 px-5 py-3 bg-orange-500 text-white font-bold rounded-2xl shadow-md hover:bg-opacity-90 active:scale-95 transition-all">
+          <Plus size={18} /> Thêm dịch vụ mới
         </button>
       </div>
 
       {/* Filter bar */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
-            <Search size={16} />
-          </span>
-          <input
-            type="text"
-            placeholder="Tìm tên dịch vụ..."
-            value={searchTerm}
-            onChange={handleSearchChange}
-            className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 text-gray-700"
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="relative w-full md:w-96">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-400"><Search size={18} /></span>
+          <input 
+            type="text" 
+            placeholder="Tìm kiếm theo tên gói, mô tả dịch vụ..." 
+            value={searchTerm} 
+            onChange={(e) => setSearchTerm(e.target.value)} 
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 text-gray-700" 
           />
         </div>
-        <select
-          value={selectedCategory}
-          onChange={handleCategoryChange}
+
+        <select 
+          value={selectedCategory} 
+          onChange={(e) => setSelectedCategory(e.target.value)} 
           disabled={categoryLoading}
-          className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none text-gray-700 font-medium disabled:opacity-50"
+          className="w-full sm:w-56 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 focus:outline-none focus:border-orange-500 disabled:opacity-60"
         >
           <option value="ALL">Tất cả danh mục</option>
-          {Array.isArray(categories) && categories.map((cat) => (
-            <option key={cat.id} value={cat.id}>{cat.name}</option>
-          ))}
+          {/* ĐỒNG BỘ MỚI: Lọc chặt chẽ phía UI chỉ hiển thị danh mục có loại là SERVICE */}
+          {categories
+            .filter((cat) => cat.categoryType === 'SERVICE' || cat.type === 'SERVICE' || !cat.categoryType)
+            .map((cat) => (
+              <option key={cat.id || cat.name} value={cat.name}>
+                {cat.name}
+              </option>
+            ))
+          }
         </select>
       </div>
 
-      {/* Table */}
+      {/* Table list */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto relative">
-          {isGlobalLoading && (
-            <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] flex items-center justify-center z-10">
-              <Loading size="medium" />
-            </div>
-          )}
-
+        <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-gray-600">
             <thead>
-              <tr className="bg-gray-50/70 text-gray-400 text-xs uppercase font-black border-b border-gray-100">
-                <th className="p-4 w-12 text-center">STT</th>
-                <th className="p-4">Tên dịch vụ</th>
+              <tr className="bg-gray-50 text-gray-400 text-xs uppercase font-black tracking-wider border-b border-gray-100">
+                <th className="p-4 w-20">ID</th>
+                <th className="p-4">Thông tin dịch vụ</th>
                 <th className="p-4">Danh mục</th>
                 <th className="p-4">Thời gian</th>
-                <th className="p-4">Giá (VNĐ)</th>
-                <th className="p-4">Trạng thái</th>
+                <th className="p-4">Giá cơ bản</th>
                 <th className="p-4 text-right">Hành động</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {services.length === 0 ? (
+              {filteredServices.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="p-12 text-center text-gray-400">
-                    <div className="flex flex-col items-center justify-center space-y-2">
-                      <Scissors size={32} className="text-gray-300" />
-                      <span>Không tìm thấy gói dịch vụ nào phù hợp.</span>
-                    </div>
+                  <td colSpan="6" className="p-12 text-center text-gray-400">
+                    <Package size={36} className="mx-auto mb-2 text-gray-300" />
+                    Không tìm thấy gói dịch vụ nào trùng khớp.
                   </td>
                 </tr>
               ) : (
-                services.map((service, index) => {
-                  // Phòng ngừa lỗi runtime render ảnh an toàn
-                  const thumbnailObj = Array.isArray(service.serviceImages) 
-                    ? service.serviceImages.find((img) => img && img.isThumbnail) 
-                    : null;
-
-                  return (
-                    <tr key={service.id} className="hover:bg-gray-50/50 transition-colors group">
-                      <td className="p-4 text-center font-mono text-xs text-gray-400">
-                        {meta?.page ? (meta.page - 1) * (meta.pageSize ?? PAGE_SIZE) + index + 1 : index + 1}
-                      </td>
-
-                      <td className="p-4">
-                        <div className="flex items-center gap-3 text-left">
-                          {thumbnailObj?.imageUrl && (
-                            <img
-                              src={thumbnailObj.imageUrl}
-                              alt={service.name || "Service image"}
-                              className="w-10 h-10 rounded-xl object-cover border border-gray-100 shrink-0 bg-gray-50"
-                            />
-                          )}
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-gray-800">{service.name || ''}</span>
-                              {Number(service.averageRating) >= 4.8 && (
-                                <Star size={13} className="text-amber-500 fill-amber-500" title="Dịch vụ nổi bật" />
-                              )}
-                            </div>
-                            <div className="text-xs text-gray-400 max-w-xs truncate">{service.description || ''}</div>
-                            {Number(service.averageRating) > 0 && (
-                              <div className="flex items-center gap-1 mt-0.5">
-                                <Star size={11} className="text-amber-400 fill-amber-400" />
-                                <span className="text-[11px] font-semibold text-amber-600">{Number(service.averageRating).toFixed(1)}</span>
-                                <span className="text-[11px] text-gray-400">({(service.totalReviews || 0).toLocaleString()} đánh giá)</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="p-4">
-                        <span className="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-md text-xs font-semibold inline-block">
-                          {/* Đảm bảo render chuỗi an toàn, nếu null hoặc bọc object sẽ không crash */}
-                          {typeof service.categoryName === 'string' ? service.categoryName : 'Chưa phân loại'}
-                        </span>
-                      </td>
-
-                      <td className="p-4 font-medium text-gray-700">
-                        <div className="flex items-center gap-1">
-                          <Clock size={14} className="text-gray-400" />
-                          {service.durationMin || 0} phút
-                        </div>
-                      </td>
-
-                      <td className="p-4">
-                        <div className="font-bold text-gray-800">
-                          {(service.basePrice || 0).toLocaleString()}đ
-                        </div>
-                      </td>
-
-                      <td className="p-4">
-                        <span className="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-green-50 text-green-600">
-                          Hoạt động
-                        </span>
-                      </td>
-
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(service)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl border border-transparent hover:border-blue-200"
-                            title="Sửa dịch vụ"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmDelete({ isOpen: true, id: service.id, name: service.name || '' })}
-                            className="p-2 text-red-500 hover:bg-red-50 rounded-xl border border-transparent hover:border-red-200"
-                            title="Xóa dịch vụ"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
+                filteredServices.map((service) => (
+                  <tr key={service.id} className="hover:bg-gray-50/50 transition-colors group">
+                    <td className="p-4 font-mono font-bold text-gray-400">
+                      #{service.id}
+                    </td>
+                    <td className="p-4 max-w-sm">
+                      <div className="font-bold text-gray-800 text-sm group-hover:text-orange-500 transition-colors">
+                        {service.name}
+                      </div>
+                      <div className="text-xs text-gray-400 truncate mt-0.5" title={service.description}>
+                        {service.description || 'Chưa cập nhật mô tả ngắn.'}
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-1">
+                        Ngày tạo: {formatDate(service.createdDate)}
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 border border-blue-100">
+                        <Layers size={12} /> {service.categoryName || 'Mặc định'}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-1 text-xs font-medium text-gray-600">
+                        <Clock size={14} className="text-gray-400" /> {service.durationMin} phút
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <div className="font-black text-gray-900 text-sm flex items-center">
+                        <DollarSign size={14} className="text-gray-400 shrink-0" />
+                        {formatPrice(service.basePrice)}
+                      </div>
+                    </td>
+                    <td className="p-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button onClick={() => handleOpenViewModal(service)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-xl border border-transparent transition-all" title="Xem chi tiết">
+                          <Eye size={16} />
+                        </button>
+                        <button onClick={() => handleOpenEditModal(service)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl border border-transparent hover:border-blue-200 transition-all" title="Sửa thông tin">
+                          <Edit2 size={16} />
+                        </button>
+                        <button onClick={() => handleConfirmDelete(service.id, service.name)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl border border-transparent hover:border-red-200 transition-all" title="Xóa dịch vụ">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
         </div>
 
+        {/* ─── PAGINATION ──────────────────────── */}
         {meta && meta.pages > 1 && (
-          <div className="p-4 border-t border-gray-100 flex justify-end">
+          <div className="p-4 border-t border-gray-100 bg-gray-50/50">
             <Pagination
               currentPage={currentPage}
               totalPages={meta.pages}
@@ -321,22 +370,62 @@ const ServiceManagement = () => {
         )}
       </div>
 
-      {/* Form Quản lý Admin tích hợp ảnh */}
-      <ServiceFormAdmin
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSave={handleSaveSuccess} // 🌟 Thay đổi kết nối callback sạch
-        serviceData={selectedService}
-      />
+      {/* MODAL LUỒNG FORM DỊCH VỤ */}
+      <Modal 
+        isOpen={isModalOpen} 
+        onClose={handleCancelForm} 
+        title={modalType === 'CREATE' ? 'Thêm gói dịch vụ mới' : modalType === 'EDIT' ? 'Cập nhật thông tin dịch vụ' : 'Chi tiết thông tin gói Spa'}
+        size='lg'
+      >
+        {modalType === 'VIEW' ? (
+          /* Chế độ chỉ đọc chi tiết (VIEW) hiển thị gọn gàng */
+          <div className="space-y-4 text-sm text-gray-700">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <span className="block font-semibold text-gray-500 text-xs uppercase">Tên dịch vụ</span>
+                <span className="text-base font-bold text-gray-900">{selectedService?.name}</span>
+              </div>
+              <div>
+                <span className="block font-semibold text-gray-500 text-xs uppercase">Danh mục</span>
+                <span className="inline-block mt-1 px-2 py-0.5 bg-blue-50 text-blue-600 text-xs font-bold rounded">{selectedService?.categoryName || 'Mặc định'}</span>
+              </div>
+            </div>
+            <div>
+              <span className="block font-semibold text-gray-500 text-xs uppercase">Mô tả dịch vụ</span>
+              <p className="bg-gray-50 p-3 rounded-lg border border-gray-100 mt-1 whitespace-pre-line text-gray-600">{selectedService?.description || 'Không có mô tả.'}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4 border-t pt-3">
+              <div>
+                <span className="block font-semibold text-gray-500 text-xs uppercase">Giá gốc niêm yết</span>
+                <span className="text-lg font-black text-gray-900">{formatPrice(selectedService?.basePrice)}</span>
+              </div>
+              <div>
+                <span className="block font-semibold text-gray-500 text-xs uppercase">Thời lượng dự kiến</span>
+                <span className="text-base font-semibold text-gray-800">{selectedService?.durationMin} phút</span>
+              </div>
+            </div>
+            <div className="flex justify-end pt-4 border-t border-gray-100">
+              <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors">Đóng</button>
+            </div>
+          </div>
+        ) : (
+          /* Chế độ nhập liệu CREATE / EDIT */
+          <ServiceFormAdmin
+            initialData={selectedService}
+            onSubmit={handleFormSubmit}
+            onClose={handleCancelForm}
+          />
+        )}
+      </Modal>
 
-      {/* Modal xác nhận xóa */}
+      {/* CONFIRM_MODAL ĐỂ KIỂM SOÁT THAO TÁC NGUY HIỂM */}
       <ConfirmModal
-        isOpen={confirmDelete.isOpen}
-        onClose={() => setConfirmDelete({ isOpen: false, id: null, name: '' })}
-        onConfirm={executeDelete}
-        title="Xóa dịch vụ cửa hàng"
-        message={`Bạn có chắc chắn muốn xóa vĩnh viễn gói dịch vụ "${confirmDelete.name}"? Thao tác này không thể hoàn tác.`}
-        type="danger"
+        isOpen={confirmModal.isOpen}
+        onClose={closeConfirmModal}
+        onConfirm={handleConfirmAction}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type={confirmModal.type === 'CONFIRM_DELETE' ? 'danger' : 'warning'}
       />
     </div>
   );
