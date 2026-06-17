@@ -129,10 +129,10 @@ export const useServiceStore = create((set, get) => ({
 
       set({
         currentService:
-          res || null,
+          res .data|| null,
       });
 
-      return res;
+      return res.data;
     } catch (err) {
       console.error(
         "Fetch service detail error:",

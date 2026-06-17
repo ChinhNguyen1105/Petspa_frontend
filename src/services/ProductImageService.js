@@ -6,17 +6,24 @@ import { URL_CONSTANT } from "../constants/urlConstant";
 | GET PRODUCT IMAGES
 |--------------------------------------------------------------------------
 */
-const getProductImages = async (
-  productId
-) => {
+const getProductImages = async (productId) => {
   const resp = await api.get(
-    URL_CONSTANT.ProductImages.GET_IMAGES.replace(
-      "{productId}",
-      productId
-    )
+    URL_CONSTANT.ProductImages.GET_IMAGES.replace("{productId}", productId)
   );
 
-  return resp.data;
+  const baseUrl = `${import.meta.env.VITE_API_URL}/uploads/products`;
+
+  const mapped = (resp.data?.data || []).map((img) => ({
+    ...img,
+    imageUrl: img.imageUrl
+      ? `${baseUrl}/${img.imageUrl}`
+      : "",
+  }));
+
+  return {
+    ...resp.data,
+    data: mapped,
+  };
 };
 
 /*

@@ -3,7 +3,9 @@ import { APP_CONFIG } from "./config";
 import { URL_CONSTANT } from "../constants/urlConstant";
 
 const delay = (ms) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+  new Promise((resolve) =>
+    setTimeout(resolve, ms)
+  );
 
 let useApi = APP_CONFIG.USE_REAL_API;
 
@@ -18,31 +20,22 @@ const shouldUseApi = (options = {}) =>
 
 /*
 |--------------------------------------------------------------------------
-| CREATE PRODUCT REVIEW
+| PRODUCT REVIEW
 |--------------------------------------------------------------------------
 */
-const createProductReview = async (
-  {
-    productId,
-    rating,
-    comment,
-  },
+
+const getProductReviews = async (
+  productId,
+  params = {},
   options = {}
 ) => {
-  if (!productId) {
-    throw new Error(
-      "productId is required"
-    );
-  }
-
   if (shouldUseApi(options)) {
-    const resp = await api.post(
-      URL_CONSTANT.ProductReview.CREATE_REVIEW,
-      {
-        productId: Number(productId),
-        rating: Number(rating),
-        comment,
-      }
+    const resp = await api.get(
+      URL_CONSTANT.ProductReview.GET_REVIEWS_BY_PRODUCT.replace(
+        "{productId}",
+        productId
+      ),
+      { params }
     );
 
     return resp.data;
@@ -51,56 +44,210 @@ const createProductReview = async (
   await delay(300);
 
   return {
-    success: true,
-    message:
-      "Review created successfully",
+    avgRating: 0,
+    totalReviews: 0,
+    reviews: {
+      meta: {},
+      result: [],
+    },
   };
 };
+
+const createProductReview =
+  async (
+    request,
+    options = {}
+  ) => {
+    if (shouldUseApi(options)) {
+      const resp = await api.post(
+        URL_CONSTANT.ProductReview.CREATE_REVIEW,
+        request
+      );
+
+      return resp.data;
+    }
+
+    await delay(300);
+
+    return request;
+  };
+
+const updateProductReview =
+  async (
+    request,
+    options = {}
+  ) => {
+    if (shouldUseApi(options)) {
+      const resp = await api.put(
+        URL_CONSTANT.ProductReview.UPDATE_REVIEW,
+        request
+      );
+
+      return resp.data;
+    }
+
+    await delay(300);
+
+    return request;
+  };
+
+const deleteProductReview =
+  async (
+    reviewId,
+    options = {}
+  ) => {
+    if (shouldUseApi(options)) {
+      const resp = await api.delete(
+        URL_CONSTANT.ProductReview.DELETE_REVIEW.replace(
+          "{reviewId}",
+          reviewId
+        )
+      );
+
+      return resp.data;
+    }
+
+    await delay(300);
+
+    return {
+      status: true,
+      message:
+        "Delete review successfully",
+    };
+  };
 
 /*
 |--------------------------------------------------------------------------
-| CREATE SERVICE REVIEW
+| SERVICE REVIEW
 |--------------------------------------------------------------------------
 */
-const createServiceReview = async (
-  {
-    serviceId,
-    rating,
-    comment,
-  },
+
+const getServiceReviews = async (
+  serviceId,
+  params = {},
   options = {}
 ) => {
-  if (!serviceId) {
-    throw new Error(
-      "serviceId is required"
-    );
-  }
-
   if (shouldUseApi(options)) {
-    const resp = await api.post(
-      URL_CONSTANT.PetServiceReviews
-        .CREATE_REVIEW,
-      {
-        serviceId: Number(serviceId),
-        rating: Number(rating),
-        comment,
-      }
+    const resp = await api.get(
+      URL_CONSTANT.PetServiceReviews.GET_SERVICE_REVIEWS.replace(
+        "{serviceId}",
+        serviceId
+      ),
+      { params }
     );
-
+    console.log("get service reviews", resp);
     return resp.data;
   }
 
   await delay(300);
 
   return {
-    success: true,
-    message:
-      "Review created successfully",
+    meta: {},
+    result: [],
   };
 };
 
-export default {
+const createServiceReview =
+  async (
+    request,
+    options = {}
+  ) => {
+    if (shouldUseApi(options)) {
+      const resp = await api.post(
+        URL_CONSTANT.PetServiceReviews.CREATE_REVIEW,
+        request
+      );
+
+      return resp.data;
+    }
+
+    await delay(300);
+
+    return request;
+  };
+
+const deleteServiceReview =
+  async (
+    reviewId,
+    options = {}
+  ) => {
+    if (shouldUseApi(options)) {
+      const resp = await api.delete(
+        URL_CONSTANT.PetServiceReviews.DELETE_REVIEW.replace(
+          "{id}",
+          reviewId
+        )
+      );
+
+      return resp.data;
+    }
+
+    await delay(300);
+
+    return {
+      status: true,
+      message:
+        "Delete review successfully",
+    };
+  };
+
+const getAverageRating =
+  async (
+    serviceId,
+    options = {}
+  ) => {
+    if (shouldUseApi(options)) {
+      const resp = await api.get(
+        URL_CONSTANT.PetServiceReviews.GET_AVERAGE_RATING.replace(
+          "{serviceId}",
+          serviceId
+        )
+      );
+
+      return resp.data;
+    }
+
+    await delay(300);
+
+    return 0;
+  };
+
+const getReviewCount =
+  async (
+    serviceId,
+    options = {}
+  ) => {
+    if (shouldUseApi(options)) {
+      const resp = await api.get(
+        URL_CONSTANT.PetServiceReviews.GET_REVIEW_COUNT.replace(
+          "{serviceId}",
+          serviceId
+        )
+      );
+
+      return resp.data;
+    }
+
+    await delay(300);
+
+    return 0;
+  };
+
+const ReviewService = {
   setApi,
+
+  // Product
+  getProductReviews,
   createProductReview,
+  updateProductReview,
+  deleteProductReview,
+
+  // Service
+  getServiceReviews,
   createServiceReview,
+  deleteServiceReview,
+  getAverageRating,
+  getReviewCount,
 };
+
+export default ReviewService;

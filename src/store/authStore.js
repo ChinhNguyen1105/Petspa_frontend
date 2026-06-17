@@ -90,46 +90,43 @@ export const useAuthStore = create((set, get) => ({
   */
   registerAction: async (registerData) => {
   set({ loading: true, error: null });
-    console.log("register payload", registerData);
+
   try {
     const res = await AuthService.register(registerData);
 
     // ========================
-    // UNIFY RESPONSE FORMAT
+    // NORMALIZE RESPONSE
     // ========================
-    const responseData = res?.data ?? res;
-
-    const user = responseData?.user;
-    const accessToken = responseData?.accessToken;
-
+    const user = res?.data; // <- user nằm trong data.data
+    const status = res?.status;
+    console.log("user :", user);
+    console.log("status: ", status);
     // ========================
-    // VALIDATE RESPONSE
+    // VALIDATE
     // ========================
-    if (!user || !accessToken) {
+    if (!user || !status) {
       throw new Error("Invalid register response structure");
     }
 
     // ========================
-    // SAVE TO STORAGE
+    // SAVE STORAGE
     // ========================
     localStorage.setItem("petspa_user", JSON.stringify(user));
-    localStorage.setItem("petspa_token", accessToken);
-
     // ========================
     // UPDATE STORE
     // ========================
     set({
       user,
-      token: accessToken,
-      isAuthenticated: true,
+      isAuthenticated: false, // chưa login sau register
       loading: false,
       error: null,
     });
 
     return {
       success: true,
-      data: responseData,
+      data: user,
     };
+
   } catch (err) {
     const msg =
       err?.response?.data?.message ||

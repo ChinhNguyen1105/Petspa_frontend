@@ -17,6 +17,7 @@ const Register = () => {
   const loading = useAuthStore((state) => state.loading);
   const serverError = useAuthStore((state) => state.error);
   const registerAction = useAuthStore((state) => state.registerAction);
+  const loginAction = useAuthStore((state) => state.loginAction);
 
   // Khởi tạo State lưu trữ Form dữ liệu nhập liệu (Đồng bộ 4 trường)
   const [formData, setFormData] = useState({
@@ -44,44 +45,48 @@ const Register = () => {
   };
 
   // Xử lý gửi Form Đăng ký và Điều Hướng
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    // 1. Kiểm tra dữ liệu đầu vào phía Client thông qua Validator mới clean
-    const validation = validateRegisterForm(formData);
-    if (!validation.isValid) {
-      setValidationError(validation.message);
-      return;
-    }
+const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    if (typeof registerAction !== "function") {
-      setValidationError("Hệ thống đang được cập nhật. Vui lòng tải lại trang.");
-      return;
-    }
+  const validation = validateRegisterForm(formData);
+  if (!validation.isValid) return;
 
-    // 2. Chuẩn hóa payload đúng cấu trúc ReqRegister DTO Backend
-    const submitData = {
-      name: formData.name.trim(),
-      email: formData.email.trim(),
-      password: formData.password,
-      confirmPassword: formData.confirmPassword
-    };
-
-    // 3. Thực thi hành động đăng ký qua Zustand Store
-    const result = await registerAction(submitData);
-    
-    if (result?.success) {
-      // Kích hoạt trạng thái hiển thị màn hình chúc mừng
-      setIsSuccess(true);
-      
-      // Kiểm tra vai trò (Role) của User từ phản hồi hệ thống để điều hướng chính xác
-      const userRole = result?.data?.user?.role?.name?.toUpperCase() || "";
-      
-      setTimeout(() => {
-          navigate("/", { replace: true });
-      }, 3000); // Chờ 3 giây để người dùng đọc thông tin đăng ký thành công
-    }
+  const submitData = {
+    name: formData.name.trim(),
+    email: formData.email.trim(),
+    password: formData.password,
+    confirmPassword: formData.confirmPassword,
   };
+
+  // ======================
+  // REGISTER
+  // ======================
+  const registerResult = await registerAction(submitData);
+  if (!registerResult?.success) return;
+
+  // ======================
+  // LOGIN
+  // ======================
+  const loginResult = await loginAction({
+    email: submitData.email,
+    password: submitData.password,
+  });
+
+  if (!loginResult?.success) {
+    navigate("/login");
+    return;
+  }
+
+  // ======================
+  // CHỈ SET SUCCESS SAU KHI LOGIN OK
+  // ======================
+  setIsSuccess(true);
+
+  // CHỜ UI RENDER THẬT SỰ
+  await new Promise((r) => setTimeout(r, 3000));
+
+  navigate("/", { replace: true });
+};
 
   // MÀN HÌNH CHÚC MỪNG KHI ĐĂNG KÝ THÀNH CÔNG (UX INTERMEDIATE STATE)
   if (isSuccess) {

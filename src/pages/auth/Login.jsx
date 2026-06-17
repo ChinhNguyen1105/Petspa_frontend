@@ -56,10 +56,8 @@ const Login = () => {
       email: formData.email.trim(),
       password: formData.password,
     });
-console.log("LOGIN RESULT:", result);
-console.log("FINAL ROLE:", result.role);
+
     if (result?.success) {
-      console.log("FINAL ROLE:", result.role);
 
       // Điều hướng dựa theo vai trò (Role) trả về từ Store
       if (["ROLE_ADMIN", "ROLE_STAFF"].includes(result.role)) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { Search, SlidersHorizontal, Layers } from "lucide-react";
 
 import { useServiceStore } from "../../store/serviceStore";
@@ -12,14 +12,12 @@ const ServiceList = () => {
   const [filterCategoryId, setFilterCategoryId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 12; // Số lượng item trên 1 trang ở Frontend
 
-  // 🌟 SỬA TẠI ĐÂY: Lấy "meta" thay vì "pagination" từ store để khớp logic store mới
   const {
     services,
-    meta,
     loading: loadingServices,
     fetchServices,
-    type = "SERVICE",
   } = useServiceStore();
 
   const {
@@ -28,33 +26,53 @@ const ServiceList = () => {
     fetchCategories,
   } = useCategoryStore();
 
-const filteredCategories = Array.isArray(categories) 
-  ? categories.filter(cat => cat && cat.categoryType === "SERVICE") 
-    : [];
-  
-  // Mount: Chỉ fetch danh mục 1 lần duy nhất
+  // 1. Chỉ gọi API lấy dữ liệu 1 lần duy nhất khi vào trang
   useEffect(() => {
     fetchCategories();
-  }, []);
+    // Gọi API lấy TẤT CẢ dịch vụ (Truyền page/size lớn hoặc theo thiết kế của API để lấy hết về)
+    fetchServices({ page: 1, size: 999 }); 
+  }, [fetchCategories, fetchServices]);
 
-  // TRIGGER EFFECT: Lấy dữ liệu theo meta, tự động gọi API khi có thay đổi
-  useEffect(() => {
-    // SỬA TẠI ĐÂY: Sử dụng meta?.pageSize hoặc fallback an toàn là 12
-    const currentSize = meta?.pageSize || 12;
+  // 2. Lọc danh mục dạng "SERVICE" ở frontend
+  const filteredCategories = useMemo(() => {
+    return Array.isArray(categories)
+      ? categories.filter((cat) => cat && cat.categoryType === "SERVICE")
+      : [];
+  }, [categories]);
 
-    const delayDebounceFn = setTimeout(() => {
-      fetchServices({
-        keyword: searchTerm || undefined,
-        categoryId: filterCategoryId || undefined,
-        page: currentPage,
-        size: currentSize,
-      });
-    }, 300);
+  // 3. LỌC DỮ LIỆU HOÀN TOÀN Ở FRONTEND (Dùng useMemo để tối ưu hiệu năng)
+  const allFilteredServices = useMemo(() => {
+    const rawServices = Array.isArray(services) ? services : [];
+    
+    return rawServices.filter((service) => {
+      if (!service) return false;
 
-    return () => clearTimeout(delayDebounceFn);
-  }, [filterCategoryId, searchTerm, currentPage, meta?.pageSize]);
+      // Kiểm tra theo danh mục (Kiểm tra cả categoryId và categoryName phòng hờ)
+      const matchesCategory =
+        filterCategoryId === null || 
+        service.categoryId === filterCategoryId;
 
-  // Reset về trang 1 ngay khi tương tác bộ lọc mới
+      // Kiểm tra theo từ khóa tìm kiếm (tên hoặc mô tả)
+      const cleanSearch = searchTerm.trim().toLowerCase();
+      const matchesSearch =
+        !cleanSearch ||
+        service.name?.toLowerCase().includes(cleanSearch) ||
+        service.description?.toLowerCase().includes(cleanSearch);
+
+      return matchesCategory && matchesSearch;
+    });
+  }, [services, filterCategoryId, searchTerm]);
+
+  // 4. PHÂN TRANG HOÀN TOÀN Ở FRONTEND
+  const totalPages = Math.ceil(allFilteredServices.length / PAGE_SIZE);
+  
+  const currentTableData = useMemo(() => {
+    const startIndex = (currentPage - 1) * PAGE_SIZE;
+    const endIndex = startIndex + PAGE_SIZE;
+    return allFilteredServices.slice(startIndex, endIndex);
+  }, [allFilteredServices, currentPage]);
+
+  // Reset về trang 1 khi tương tác bộ lọc
   const handleCategoryChange = (id) => {
     setFilterCategoryId(id);
     setCurrentPage(1);
@@ -70,7 +88,7 @@ const filteredCategories = Array.isArray(categories)
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const isFirstLoad = loadingCategories || (loadingServices && (!services || services.length === 0));
+  const isFirstLoad = loadingCategories || loadingServices;
 
   if (isFirstLoad) {
     return (
@@ -79,12 +97,6 @@ const filteredCategories = Array.isArray(categories)
       </div>
     );
   }
-
-  // Khai báo fallback an toàn để UI không bị vỡ
-  const serviceList = Array.isArray(services) ? services : [];
-  
-  // 🌟 SỬA TẠI ĐÂY: Đọc từ meta.totalPages hoặc meta.pages
-  const totalPages = meta?.totalPages || meta?.pages || 0;
 
   return (
     <div className="min-h-screen bg-gray-50/50 pt-10 pb-20 text-left">
@@ -113,36 +125,32 @@ const filteredCategories = Array.isArray(categories)
               Tất Cả
             </button>
 
-            {Array.isArray(filteredCategories) &&
-              filteredCategories.map((cat, index) => {
-                const categoryName = typeof cat === "string" ? cat : cat.name || cat.title;
-                const currentId = cat.id !== undefined ? cat.id : index;
-                if (!categoryName) return null;
+            {filteredCategories.map((cat, index) => {
+              const categoryName = cat.name || cat.title;
+              const currentId = cat.id !== undefined ? cat.id : index;
+              if (!categoryName) return null;
 
-                return (
-                  <button
-                    key={currentId}
-                    onClick={() => handleCategoryChange(currentId)}
-                    className={`px-5 py-2 rounded-full text-xs font-black uppercase tracking-wider transition-all duration-200 cursor-pointer border outline-none ${
-                      filterCategoryId === currentId
-                        ? "bg-pet-blue text-white border-pet-blue shadow-lg shadow-blue-500/10"
-                        : "bg-white text-gray-500 hover:bg-gray-100 border-gray-200"
-                    }`}
-                  >
-                    {categoryName}
-                  </button>
-                );
-              })}
+              return (
+                <button
+                  key={currentId}
+                  onClick={() => handleCategoryChange(currentId)}
+                  className={`px-5 py-2 rounded-full text-xs font-black uppercase tracking-wider transition-all duration-200 cursor-pointer border outline-none ${
+                    filterCategoryId === currentId
+                      ? "bg-pet-blue text-white border-pet-blue shadow-lg shadow-blue-500/10"
+                      : "bg-white text-gray-500 hover:bg-gray-100 border-gray-200"
+                  }`}
+                >
+                  {categoryName}
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {/* ─── TOOLBAR ─── */}
         <div className="bg-white p-4 rounded-2xl border border-gray-100 mb-8 flex flex-col sm:flex-row gap-4 justify-between items-center shadow-sm">
           <div className="relative w-full sm:w-96">
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-              size={18}
-            />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input
               type="text"
               value={searchTerm}
@@ -159,19 +167,15 @@ const filteredCategories = Array.isArray(categories)
         </div>
 
         {/* ─── GRID LIST & PAGINATION ─── */}
-        {loadingServices ? (
-          <div className="min-h-[400px] flex items-center justify-center">
-            <Loading />
-          </div>
-        ) : serviceList.length > 0 ? (
+        {currentTableData.length > 0 ? (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-8">
-              {serviceList.map((service) => (
+              {currentTableData.map((service) => (
                 <ServiceCard key={service.id} service={service} />
               ))}
             </div>
 
-            {/* Thanh phân trang được kiểm tra qua totalPages từ store */}
+            {/* Thanh phân trang dựa theo dữ liệu đã cắt ở frontend */}
             {totalPages > 1 && (
               <div className="mt-12 flex justify-center">
                 <Pagination

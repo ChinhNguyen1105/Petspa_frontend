@@ -74,23 +74,6 @@ const register = async (registerData, options = {}) => {
     return resp.data;
   }
 
-  // ========================
-  // MOCK MODE
-  // ========================
-  await delay(1000);
-
-  return {
-    success: true,
-    message: "Register successfully",
-    data: {
-      ...registerMock.data,
-      user: {
-        ...registerMock.data.user,
-        name: payload.name,
-        email: payload.email,
-      },
-    },
-  };
 };
 
 /*

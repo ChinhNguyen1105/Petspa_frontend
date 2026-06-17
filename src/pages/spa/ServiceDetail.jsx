@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Star, Clock, Tag, ShieldAlert, CheckCircle2, Heart,
-  ArrowLeft, CalendarCheck, User2
+  Star, Clock, Heart, ArrowLeft, CalendarCheck
 } from 'lucide-react';
 
 import { useServiceStore } from '../../store/serviceStore';
@@ -11,15 +10,13 @@ import { useReviewStore } from '../../store/reviewStore';
 import { Button } from '../../components/common/Button';
 import Loading from '../../components/common/Loading';
 import { formatPrice } from '../../utils/formatPrice';
-
-// IMPORT COMPONENT ĐÃ TÁI SỬ DỤNG TẠI ĐÂY
-// (Hãy điều chỉnh đường dẫn ../ cho đúng vị trí file ReviewProduct bạn lưu)
 import ReviewService from '../review/ReviewService';
 
 const ServiceDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [activeImage, setActiveImage] = useState('');
+  const fallbackDefaultImg = 'https://images.unsplash.com/photo-1516734212186-a967f81ad0d7?q=80&w=800';
 
   const {
     currentService,
@@ -31,43 +28,38 @@ const ServiceDetail = () => {
   const {
     reviews,
     loading: loadingReviews,
-    getServiceReviews,
-    clearReviews,
+    fetchServiceReviews,
+    resetReviews,
   } = useReviewStore();
-  
-  console.log("review service: ", reviews);
 
-  // Fetch chi tiết dịch vụ
+  // 1. Fetch chi tiết dịch vụ & dọn dẹp khi Unmount
   useEffect(() => {
-    if (id) fetchServiceById(id);
+    if (id) {
+      fetchServiceById(id);
+      fetchServiceReviews(id);
+    }
+    
     return () => {
       clearCurrentService();
-      clearReviews();
+      resetReviews();
     };
-  }, [id]);
+  }, [id, fetchServiceById, fetchServiceReviews, clearCurrentService, resetReviews]);
 
-  // Fetch reviews riêng theo serviceId
-  useEffect(() => {
-    if (id) getServiceReviews(id);
-  }, [id]);
-
-  // Gom danh sách ảnh
-  const allImages = currentService
-    ? [
-        (currentService.serviceImages?.find((img) => img.isThumbnail) ||
-          currentService.serviceImages?.[0])?.imageUrl,
-        ...(currentService.serviceImages?.map((img) => img.imageUrl) || []),
-        currentService.thumbnailUrl || currentService.thumbnailURL,
-        ...(currentService.imagesUrls || []),
-        ...(currentService.images || []),
-      ]
-        .filter(Boolean)
-        .filter((v, i, self) => self.indexOf(v) === i)
-    : [];
-
-  useEffect(() => {
-    setActiveImage(allImages.length > 0 ? allImages[0] : '');
+  console.log("current service: ", currentService);
+  // 2. Thu gom mảng hình ảnh từ API mới (Ưu tiên đưa ảnh thumbnail lên đầu)
+  const allImages = React.useMemo(() => {
+    if (!currentService?.serviceImages || !Array.isArray(currentService.serviceImages)) return [];
+    
+    const images = [...currentService.serviceImages];
+    images.sort((a, b) => (b.isThumbnail ? 1 : 0) - (a.isThumbnail ? 1 : 0));
+    
+    return images.map(img => img.imageUrl).filter(Boolean);
   }, [currentService]);
+
+  // 3. Theo dõi đặt ảnh hoạt động đầu tiên
+  useEffect(() => {
+    setActiveImage(allImages.length > 0 ? allImages[0] : fallbackDefaultImg);
+  }, [allImages]);
 
   const handleBookingRedirect = () => {
     if (currentService?.id) {
@@ -88,9 +80,18 @@ const ServiceDetail = () => {
     );
   }
 
+  // 4. Đồng bộ các hằng số hiển thị từ API mới
+  const displayCategoryName = currentService.categoryName || "Dịch vụ Spa";
+  const displayRating = currentService.averageRating !== null && currentService.averageRating !== undefined 
+    ? currentService.averageRating.toFixed(1) 
+    : "4.5";
+  const displayTotalReviews = currentService.totalReviews !== undefined 
+    ? currentService.totalReviews 
+    : (reviews?.length || 0);
+
   return (
     <div className="min-h-screen bg-gray-50/50 pt-10 pb-20 text-left">
-      <div className="container mx-auto px-10 max-w-5xl">
+      <div className="container mx-auto px-4 md:px-10 max-w-5xl">
 
         {/* Nút quay lại */}
         <button
@@ -102,47 +103,72 @@ const ServiceDetail = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8 bg-white p-6 sm:p-8 rounded-3xl border border-gray-100 shadow-sm mb-8">
 
-          {/* CỘT TRÁI: GALLERY */}
+          {/* CỘT TRÁI: KHỐI ALBUM ẢNH */}
           <div className="md:col-span-5 space-y-4">
             <div className="aspect-square w-full rounded-2xl overflow-hidden border border-gray-100 bg-gray-50 shadow-inner">
               <img
-                src={activeImage || 'https://placehold.co/500x500'}
+                src={activeImage}
                 alt={currentService.name}
                 className="w-full h-full object-cover transition-all duration-300 transform hover:scale-105"
+                onError={(e) => {
+                  if (e.target.src !== fallbackDefaultImg) {
+                    e.target.src = fallbackDefaultImg;
+                  }
+                }}
               />
             </div>
 
-            {allImages.length > 1 && (
-              <div className="flex gap-3 overflow-x-auto pb-2 pt-1 scrollbar-thin scrollbar-thumb-gray-200">
-                {allImages.map((imgUrl, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => setActiveImage(imgUrl)}
-                    className={`w-20 h-20 flex-shrink-0 rounded-xl overflow-hidden border-2 cursor-pointer transition-all bg-gray-50 ${
-                      activeImage === imgUrl
-                        ? 'border-pet-blue scale-[0.95] shadow-md'
-                        : 'border-transparent opacity-70 hover:opacity-100'
-                    }`}
-                  >
-                    <img
-                      src={imgUrl}
-                      alt={`gallery-thumb-${idx}`}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+           {allImages.length > 1 && (
+  <div 
+    className="flex gap-3 overflow-x-auto pb-2 pt-1 no-scrollbar cursor-grab active:cursor-grabbing select-none"
+    onMouseDown={(e) => {
+      const container = e.currentTarget;
+      container.dataset.isDown = "true";
+      container.dataset.startX = String(e.pageX - container.offsetLeft);
+      container.dataset.scrollLeft = String(container.scrollLeft);
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.dataset.isDown = "false";
+    }}
+    onMouseUp={(e) => {
+      e.currentTarget.dataset.isDown = "false";
+    }}
+    onMouseMove={(e) => {
+      const container = e.currentTarget;
+      if (container.dataset.isDown !== "true") return;
+      e.preventDefault();
+      const x = e.pageX - container.offsetLeft;
+      const walk = (x - Number(container.dataset.startX)) * 1.5; // Tốc độ lướt (1.5)
+      container.scrollLeft = Number(container.dataset.scrollLeft) - walk;
+    }}
+  >
+    {allImages.map((imgUrl, idx) => (
+      <div
+        key={idx}
+        onClick={() => setActiveImage(imgUrl)}
+        className={`w-20 h-20 flex-shrink-0 rounded-xl overflow-hidden border-2 cursor-pointer transition-all bg-gray-50 ${
+          activeImage === imgUrl
+            ? 'border-pet-blue scale-[0.95] shadow-md'
+            : 'border-transparent opacity-70 hover:opacity-100'
+        }`}
+      >
+        <img
+          src={imgUrl}
+          alt={`gallery-thumb-${idx}`}
+          className="w-full h-full object-cover pointer-events-none" // Chặn hành vi kéo ảnh mặc định của trình duyệt
+          onError={(e) => { e.target.src = fallbackDefaultImg; }}
+        />
+      </div>
+    ))}
+  </div>
+)}</div>
 
-          {/* CỘT PHẢI: THÔNG TIN */}
+          {/* CỘT PHẢI: THÔNG TIN CHI TIẾT */}
           <div className="md:col-span-7 flex flex-col justify-between space-y-6">
             <div className="space-y-4">
-              {(currentService.categoryName || currentService.category?.name) && (
-                <span className="inline-block px-3 py-1 bg-blue-50 text-pet-blue rounded-xl text-xs font-bold uppercase tracking-wider">
-                  {currentService.categoryName || currentService.category?.name}
-                </span>
-              )}
+              <span className="inline-block px-3 py-1 bg-blue-50 text-pet-blue rounded-xl text-xs font-bold uppercase tracking-wider">
+                {displayCategoryName}
+              </span>
 
               <h1 className="text-2xl sm:text-3xl font-black text-gray-800 leading-tight">
                 {currentService.name}
@@ -152,32 +178,22 @@ const ServiceDetail = () => {
                 <div className="flex items-center gap-1">
                   <Star size={16} className="text-amber-400 fill-amber-400" />
                   <span className="text-gray-800 font-bold">
-                    {currentService.averageRating || 5}
+                    {displayRating}
                   </span>
                   <span className="text-gray-400">
-                    ({reviews.length} đánh giá)
+                    ({displayTotalReviews} đánh giá)
                   </span>
                 </div>
               </div>
 
               <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-center gap-4">
                 <span className="text-3xl font-black text-pet-orange">
-                  {formatPrice(currentService.basePrice || currentService.price || 0)}
+                  {formatPrice(currentService.basePrice || 0)}
                 </span>
-                {currentService.discountPercent > 0 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-400 line-through font-medium">
-                      {formatPrice(currentService.originalPrice || 0)}
-                    </span>
-                    <span className="text-xs px-2 py-0.5 bg-red-100 text-red-500 rounded-lg font-bold flex items-center gap-0.5">
-                      <Tag size={12} /> Giảm {currentService.discountPercent}%
-                    </span>
-                  </div>
-                )}
               </div>
 
               <p className="text-sm text-gray-600 leading-relaxed font-medium">
-                {currentService.description}
+                {currentService.description || 'Dịch vụ chăm sóc thú cưng chuyên nghiệp chuẩn chất lượng.'}
               </p>
 
               <div className="grid grid-cols-2 gap-4 pt-2">
@@ -188,7 +204,7 @@ const ServiceDetail = () => {
                       Thời gian ước tính
                     </p>
                     <p className="font-bold text-gray-800">
-                      {currentService.durationMin || currentService.durationMinutes || 45} phút
+                      {currentService.durationMin || 0} phút
                     </p>
                   </div>
                 </div>
@@ -199,11 +215,7 @@ const ServiceDetail = () => {
                       Thích hợp cho
                     </p>
                     <p className="font-bold text-gray-800">
-                      {currentService.suitableFor
-                        ? currentService.suitableFor
-                            .map((item) => (item === 'Dog' ? 'Chó' : 'Mèo'))
-                            .join(', ')
-                        : 'Chó, Mèo'}
+                      Chó, Mèo
                     </p>
                   </div>
                 </div>
@@ -221,41 +233,17 @@ const ServiceDetail = () => {
           </div>
         </div>
 
+        {/* KHU VỰC ĐÁNH GIÁ (REVIEW) */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-
           <div className="md:col-span-8 space-y-8">
-            {currentService.includedServices?.length > 0 && (
-              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-                <h2 className="text-base font-black text-gray-800 flex items-center gap-2 border-b pb-3 border-gray-50">
-                  <CheckCircle2 size={18} className="text-green-500" /> Các bước chăm sóc đi kèm trong gói
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {currentService.includedServices.map((step, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center gap-2 p-3 bg-gray-50/50 rounded-xl border border-gray-100 text-sm text-gray-700 font-bold"
-                    >
-                      <span className="w-5 h-5 flex items-center justify-center bg-green-100 text-green-600 rounded-full text-xs font-black">
-                        {idx + 1}
-                      </span>
-                      {step}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ── KHU VỰC ĐÁNH GIÁ ĐÃ ĐƯỢC THAY THẾ BẰNG COMPONENT REUSE ── */}
             {loadingReviews ? (
               <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex justify-center py-8">
                 <Loading />
               </div>
             ) : (
-              <ReviewService reviews={reviews} />
+              <ReviewService reviews={reviews || []} />
             )}
           </div>
-
-        
         </div>
       </div>
     </div>

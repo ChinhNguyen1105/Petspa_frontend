@@ -1,337 +1,360 @@
 import { create } from "zustand";
-import reviewService from "../services/reviewService";
+import ReviewService from "../services/ReviewService";
 
-export const useReviewStore = create((set) => ({
-  reviews: [],
-  reviewItems: [],
-  eligibility: null,
+const toArray = (data) =>
+  Array.isArray(data)
+    ? data
+    : data?.result || [];
 
-  loading: false,
-  error: null,
+export const useReviewStore = create(
+  (set, get) => ({
+    /*
+    |--------------------------------------------------------------------------
+    | STATE
+    |--------------------------------------------------------------------------
+    */
 
-  /*
-  |--------------------------------------------------------------------------
-  | Check Review Eligibility
-  |--------------------------------------------------------------------------
-  */
-  checkReviewEligibility: async (orderId) => {
-    try {
-      set({ loading: true, error: null });
+    reviews: [],
+    productReviewData: null,
 
-      const response =
-        await reviewService.checkReviewEligibility(orderId);
+    averageRating: 0,
+    reviewCount: 0,
 
-      set({
-        eligibility: response.data,
-        loading: false,
-      });
+    meta: {
+      page: 1,
+      pageSize: 10,
+      pages: 0,
+      total: 0,
+    },
 
-      return response;
-    } catch (error) {
-      set({
-        error:
-          error.response?.data?.message ||
-          error.message,
-        loading: false,
-      });
+    loading: false,
+    error: null,
 
-      throw error;
-    }
-  },
+    /*
+    |--------------------------------------------------------------------------
+    | PRODUCT REVIEW
+    |--------------------------------------------------------------------------
+    */
 
-  /*
-  |--------------------------------------------------------------------------
-  | Get Review Items
-  |--------------------------------------------------------------------------
-  */
-  getReviewItems: async (orderId) => {
-    try {
-      set({ loading: true, error: null });
-
-      const response =
-        await reviewService.getReviewItems(orderId);
-
-      set({
-        reviewItems: response.data || [],
-        loading: false,
-      });
-
-      return response;
-    } catch (error) {
-      set({
-        error:
-          error.response?.data?.message ||
-          error.message,
-        loading: false,
-      });
-
-      throw error;
-    }
-  },
-
-  /*
-  |--------------------------------------------------------------------------
-  | Get Product Reviews
-  |--------------------------------------------------------------------------
-  */
-  getProductReviews: async (productId) => {
-    try {
-      set({ loading: true, error: null });
-
-      const response =
-        await reviewService.getProductReviews(productId);
-
-      set({
-        reviews: response.data || [],
-        loading: false,
-      });
-
-      return response;
-    } catch (error) {
-      set({
-        error:
-          error.response?.data?.message ||
-          error.message,
-        loading: false,
-      });
-
-      throw error;
-    }
-  },
-
-  /*
-  |--------------------------------------------------------------------------
-  | Get Service Reviews
-  |--------------------------------------------------------------------------
-  */
-  getServiceReviews: async (serviceId) => {
-    try {
-      set({ loading: true, error: null });
-
-      const response =
-        await reviewService.getServiceReviews(serviceId);
-
-      set({
-        reviews: response.data || [],
-        loading: false,
-      });
-
-      return response;
-    } catch (error) {
-      set({
-        error:
-          error.response?.data?.message ||
-          error.message,
-        loading: false,
-      });
-
-      throw error;
-    }
-  },
-
-  /*
-  |--------------------------------------------------------------------------
-  | Get Reviews By Item
-  |--------------------------------------------------------------------------
-  */
-  getReviewsByItem: async (
-    targetType,
-    targetId
-  ) => {
-    try {
-      set({ loading: true, error: null });
-
-      const response =
-        await reviewService.getReviewsByItem(
-          targetType,
-          targetId
-        );
-
-      set({
-        reviews: response.data || [],
-        loading: false,
-      });
-
-      return response;
-    } catch (error) {
-      set({
-        error:
-          error.response?.data?.message ||
-          error.message,
-        loading: false,
-      });
-
-      throw error;
-    }
-  },
-
-  /*
-  |--------------------------------------------------------------------------
-  | Create Review
-  |--------------------------------------------------------------------------
-  */
-  createReview: async (reviewData) => {
-    try {
-      set({ loading: true, error: null });
-
-      const {
-        targetType,
-        targetId,
-        rating,
-        comment,
-      } = reviewData;
-
-      console.log(
-        "review payload:",
-        reviewData
-      );
-
-      let response;
-
-      if (targetType === "PRODUCT") {
-        response =
-          await reviewService.createProductReview({
-            productId: targetId,
-            rating,
-            comment,
+    fetchProductReviews:
+      async (
+        productId,
+        params = {}
+      ) => {
+        try {
+          set({
+            loading: true,
+            error: null,
           });
-      } else if (
-        targetType === "SERVICE"
-      ) {
-        response =
-          await reviewService.createServiceReview({
-            serviceId: targetId,
-            rating,
-            comment,
+
+          const response =
+            await ReviewService.getProductReviews(
+              productId,
+              params
+            );
+
+          const data =
+            response?.data ||
+            response;
+
+          set({
+            productReviewData:
+              data,
+
+            reviews:
+              data?.reviews
+                ?.result || [],
+
+            meta:
+              data?.reviews
+                ?.meta || {},
+
+            averageRating:
+              data?.avgRating ||
+              0,
+
+            reviewCount:
+              data?.totalReviews ||
+              0,
+
+            loading: false,
           });
-      } else {
-        throw new Error(
-          `Invalid targetType: ${targetType}`
-        );
-      }
 
-      set((state) => ({
-        reviews: [
-          response.data,
-          ...state.reviews,
-        ],
-        loading: false,
-      }));
+          return data;
+        } catch (error) {
+          set({
+            loading: false,
+            error,
+          });
 
-      return response;
-    } catch (error) {
+          throw error;
+        }
+      },
+
+    createProductReview:
+      async (payload) => {
+        try {
+          set({
+            loading: true,
+            error: null,
+          });
+
+          const response =
+            await ReviewService.createProductReview(
+              payload
+            );
+
+          set({
+            loading: false,
+          });
+
+          return response;
+        } catch (error) {
+          set({
+            loading: false,
+            error,
+          });
+
+          throw error;
+        }
+      },
+
+    updateProductReview:
+      async (payload) => {
+        try {
+          set({
+            loading: true,
+            error: null,
+          });
+
+          const response =
+            await ReviewService.updateProductReview(
+              payload
+            );
+
+          set({
+            loading: false,
+          });
+
+          return response;
+        } catch (error) {
+          set({
+            loading: false,
+            error,
+          });
+
+          throw error;
+        }
+      },
+
+    deleteProductReview:
+      async (reviewId) => {
+        try {
+          set({
+            loading: true,
+            error: null,
+          });
+
+          const response =
+            await ReviewService.deleteProductReview(
+              reviewId
+            );
+
+          set({
+            loading: false,
+          });
+
+          return response;
+        } catch (error) {
+          set({
+            loading: false,
+            error,
+          });
+
+          throw error;
+        }
+      },
+
+    /*
+    |--------------------------------------------------------------------------
+    | SERVICE REVIEW
+    |--------------------------------------------------------------------------
+    */
+
+    fetchServiceReviews:
+      async (
+        serviceId,
+        params = {}
+      ) => {
+        try {
+          set({
+            loading: true,
+            error: null,
+          });
+
+          const response =
+            await ReviewService.getServiceReviews(
+              serviceId,
+              params
+            );
+
+          const data =
+            response?.data ||
+            response;
+
+          set({
+            reviews:
+              toArray(data),
+
+            meta:
+              data?.meta ||
+              {},
+
+            loading: false,
+          });
+
+          return data;
+        } catch (error) {
+          set({
+            loading: false,
+            error,
+          });
+
+          throw error;
+        }
+      },
+
+    fetchAverageRating:
+      async (serviceId) => {
+        try {
+          const response =
+            await ReviewService.getAverageRating(
+              serviceId
+            );
+
+          const rating =
+            response?.data ??
+            response ??
+            0;
+
+          set({
+            averageRating:
+              rating,
+          });
+
+          return rating;
+        } catch (error) {
+          set({ error });
+
+          throw error;
+        }
+      },
+
+    fetchReviewCount:
+      async (serviceId) => {
+        try {
+          const response =
+            await ReviewService.getReviewCount(
+              serviceId
+            );
+
+          const count =
+            response?.data ??
+            response ??
+            0;
+
+          set({
+            reviewCount:
+              count,
+          });
+
+          return count;
+        } catch (error) {
+          set({ error });
+
+          throw error;
+        }
+      },
+
+    createServiceReview:
+      async (payload) => {
+        try {
+          set({
+            loading: true,
+            error: null,
+          });
+
+          const response =
+            await ReviewService.createServiceReview(
+              payload
+            );
+
+          set({
+            loading: false,
+          });
+
+          return response;
+        } catch (error) {
+          set({
+            loading: false,
+            error,
+          });
+
+          throw error;
+        }
+      },
+
+    deleteServiceReview:
+      async (reviewId) => {
+        try {
+          set({
+            loading: true,
+            error: null,
+          });
+
+          const response =
+            await ReviewService.deleteServiceReview(
+              reviewId
+            );
+
+          set({
+            loading: false,
+          });
+
+          return response;
+        } catch (error) {
+          set({
+            loading: false,
+            error,
+          });
+
+          throw error;
+        }
+      },
+
+    /*
+    |--------------------------------------------------------------------------
+    | RESET
+    |--------------------------------------------------------------------------
+    */
+
+    resetReviews: () =>
       set({
-        error:
-          error.response?.data?.message ||
-          error.message,
-        loading: false,
-      });
+        reviews: [],
+        productReviewData:
+          null,
 
-      throw error;
-    }
-  },
+        averageRating: 0,
+        reviewCount: 0,
 
-  /*
-  |--------------------------------------------------------------------------
-  | Update Review
-  |--------------------------------------------------------------------------
-  */
-  updateReview: async (
-    reviewId,
-    reviewData
-  ) => {
-    try {
-      set({ loading: true, error: null });
+        meta: {
+          page: 1,
+          pageSize: 10,
+          pages: 0,
+          total: 0,
+        },
 
-      const response =
-        await reviewService.updateReview(
-          reviewId,
-          reviewData
-        );
-
-      set((state) => ({
-        reviews: state.reviews.map(
-          (review) =>
-            review.id === reviewId
-              ? {
-                  ...review,
-                  ...response.data,
-                }
-              : review
-        ),
-        loading: false,
-      }));
-
-      return response;
-    } catch (error) {
-      set({
-        error:
-          error.response?.data?.message ||
-          error.message,
-        loading: false,
-      });
-
-      throw error;
-    }
-  },
-
-  /*
-  |--------------------------------------------------------------------------
-  | Delete Review
-  |--------------------------------------------------------------------------
-  */
-  deleteReview: async (reviewId) => {
-    try {
-      set({ loading: true, error: null });
-
-      const response =
-        await reviewService.deleteReview(
-          reviewId
-        );
-
-      set((state) => ({
-        reviews: state.reviews.filter(
-          (review) =>
-            review.id !== reviewId
-        ),
-        loading: false,
-      }));
-
-      return response;
-    } catch (error) {
-      set({
-        error:
-          error.response?.data?.message ||
-          error.message,
-        loading: false,
-      });
-
-      throw error;
-    }
-  },
-
-  /*
-  |--------------------------------------------------------------------------
-  | Utilities
-  |--------------------------------------------------------------------------
-  */
-  clearReviews: () =>
-    set({
-      reviews: [],
-    }),
-
-  clearReviewItems: () =>
-    set({
-      reviewItems: [],
-    }),
-
-  clearEligibility: () =>
-    set({
-      eligibility: null,
-    }),
-
-  clearError: () =>
-    set({
-      error: null,
-    }),
-}));
+        error: null,
+      }),
+  })
+);

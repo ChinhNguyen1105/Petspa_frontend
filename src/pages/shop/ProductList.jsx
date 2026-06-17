@@ -7,7 +7,6 @@ import Pagination from '../../components/common/Pagination';
 
 import { useProductStore } from '../../store/productStore';
 import { useCategoryStore } from '../../store/categoryStore';
-import { useProductImageStore } from '../../store/productImageStore';
 
 const ProductList = () => {
   // 1. Quản lý trạng thái và bộ lọc từ Product Store (Giữ nguyên Store)

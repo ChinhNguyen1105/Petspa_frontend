@@ -10,7 +10,10 @@ const ProductCard = ({ product }) => {
   const navigate = useNavigate();
   const addItem = useCartStore((state) => state.addItem);
   
-  // Áp dụng store mới để quản lý ảnh
+  // 1. Khai báo link ảnh dự phòng cố định ở trên cùng
+  const fallbackDefaultImg = 'https://images.unsplash.com/photo-1516734212186-a967f81ad0d7?q=80&w=800';
+  
+  // Áp dụng store quản lý ảnh sản phẩm
   const { images, fetchImages, loading } = useProductImageStore();
 
   useEffect(() => {
@@ -24,10 +27,21 @@ const ProductCard = ({ product }) => {
     ? product.category.name 
     : (product.categoryName || product.category_name || 'Sản phẩm');
 
-  // Ưu tiên lấy ảnh từ store mới, nếu chưa có/đang tải thì fallback về data cũ hoặc placeholder
-  const displayImage = images && images.length > 0 
-    ? images[0]?.url // Giả định object trong mảng có trường url (bạn tùy chỉnh lại trường này nếu cần)
-    : (product.thumbnail || product.image || 'https://placehold.co/300x300');
+  // 2. 🌟 TƯƠNG TỰ SERVICECARD: Tìm ảnh tối ưu nhất từ dữ liệu có sẵn
+  const displayImage = React.useMemo(() => {
+    // Trường hợp 1: Nếu store đã tải xong mảng hình ảnh và có dữ liệu
+    if (images && Array.isArray(images) && images.length > 0) {
+      // Tìm ảnh được đánh dấu là thumbnail (hỗ trợ cả trường url hoặc imageUrl)
+      const thumbnailImg = images.find((img) => img.isThumbnail)?.imageUrl || images.find((img) => img.isThumbnail)?.url;
+      // Nếu không có thumbnail, lấy ảnh đầu tiên trong mảng
+      const firstImg = images[0]?.imageUrl || images[0]?.url;
+      
+      if (thumbnailImg || firstImg) return thumbnailImg || firstImg;
+    }
+
+    // Trường hợp 2: Nếu dữ liệu trong store chưa có, fallback về các trường ảnh đính kèm trực tiếp trong object product ban đầu
+    return product.thumbnail || product.image || fallbackDefaultImg;
+  }, [images, product, fallbackDefaultImg]);
 
   const handleBuyNow = (e) => {
     e.preventDefault();
@@ -49,6 +63,12 @@ const ProductCard = ({ product }) => {
             src={displayImage}
             alt={product.name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            // 3. 🌟 Giữ màng lọc an toàn chặn mọi link ảnh lỗi từ phía API/Server
+            onError={(e) => {
+              if (e.target.src !== fallbackDefaultImg) {
+                e.target.src = fallbackDefaultImg;
+              }
+            }}
           />
         )}
         
