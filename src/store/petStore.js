@@ -88,7 +88,7 @@ export const usePetStore = create((set, get) => ({
       const res = await PetService.getMyPets(options);
 
       set({
-        myPets: res?.data?.result || [],
+        myPets: res?.data || [],
         loading: false,
       });
 
@@ -111,7 +111,8 @@ export const usePetStore = create((set, get) => ({
       set({ loading: true, error: null });
 
       const res = await PetService.getPetsByUser(userId, options);
-
+      
+      console.log("response pet by users: ", res);
       set({
         pets: res?.data?.result || [],
         loading: false,

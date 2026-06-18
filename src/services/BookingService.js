@@ -132,6 +132,9 @@ const cancelBooking = async (id, options = {}) => {
 | UPDATE STATUS
 ===================================================== */
 const updateBookingStatus = async (id, status, options = {}) => {
+    console.log("STATUS =", status);
+  console.log("TYPE =", typeof status);
+
   if (shouldUseApi(options)) {
     const resp = await api.patch(
       URL_CONSTANT.Booking.UPDATE_BOOKING_STATUS.replace("{id}", id),

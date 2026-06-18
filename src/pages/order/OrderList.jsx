@@ -8,30 +8,24 @@ import { STATUS_FILTERS } from '../../constants';
 // Sử dụng mảng bộ lọc trạng thái từ constants
 const TABS = STATUS_FILTERS;
 
-const OrderList = ({ userId = 1 }) => {
-  const [filteredOrders, setFilteredOrders] = useState([]);
+const OrderList = () => {
   const [activeTab, setActiveTab] = useState('ALL');
   
-  // ĐỒNG BỘ STORE MỚI: Dùng fetchOrders thay cho fetchOrdersByUser không còn tồn tại
-  const { orders, loading, fetchOrders, cancelOrder } = useOrderStore();
+  // 🌟 ĐỒNG BỘ STORE MỚI: Lấy đúng state `myOrders` quản lý danh sách của khách hàng
+  const { myOrders, loading, fetchMyOrders, cancelOrder } = useOrderStore();
   const { showToast } = useCartStore();
 
-  // Gọi API lấy danh sách đơn hàng khi component mount hoặc userId thay đổi
+  // 🌟 ĐỒNG BỘ LOGIC API: Gọi API lấy danh sách đơn hàng kèm điều kiện lọc status trực tiếp dưới DB
   useEffect(() => {
-    // Truyền userId qua params để lấy đúng danh sách đơn hàng của user hiện tại
-    fetchOrders({ userId });
-  }, [fetchOrders, userId]);
+    const params = {
+      page: 0,
+      size: 20,
+      // Nếu không phải tab 'ALL', truyền giá trị status (ví dụ: 'PROCESSING', 'CANCELLED') vào tham số body
+      ...(activeTab !== 'ALL' ? { status: activeTab } : {})
+    };
 
-  // Bộ lọc dữ liệu theo các Tab trạng thái tương ứng
-  useEffect(() => {
-    if (activeTab === 'ALL') {
-      setFilteredOrders(orders);
-    } else {
-      setFilteredOrders(
-        orders.filter(order => (order.status || '').toUpperCase() === activeTab)
-      );
-    }
-  }, [activeTab, orders]);
+    fetchMyOrders(params);
+  }, [fetchMyOrders, activeTab]);
 
   // Xử lý hủy đơn hàng trực tiếp từ Client
   const handleCancelOrder = async (orderId) => {
@@ -40,17 +34,25 @@ const OrderList = ({ userId = 1 }) => {
     try {
       const res = await cancelOrder(orderId);
       
+      // 🌟 ĐỒNG BỘ LOGIC PHẢN HỒI: Service trả về trực tiếp cục `res.data` chứa trường `success`
       if (res && res.success) {
         if (showToast) {
           showToast("Hủy đơn hàng thành công!", "success");
         } else {
           alert("Hủy đơn hàng thành công!");
         }
+        
+        // Nếu người dùng đang đứng ở một tab phân loại cụ thể (ví dụ: Chờ xử lý)
+        // Gọi lại fetchMyOrders để danh sách tự động cập nhật ẩn đơn hàng vừa hủy đi
+        if (activeTab !== 'ALL') {
+          fetchMyOrders({ page: 0, size: 20, status: activeTab });
+        }
       } else {
+        const errorMsg = res?.message || "Không thể hủy đơn hàng vào lúc này.";
         if (showToast) {
-          showToast(res?.message || "Không thể hủy đơn hàng vào lúc này.", "error");
+          showToast(errorMsg, "error");
         } else {
-          alert(res?.message || "Không thể hủy đơn hàng vào lúc này.");
+          alert(errorMsg);
         }
       }
     } catch (error) {
@@ -78,7 +80,7 @@ const OrderList = ({ userId = 1 }) => {
           <button
             key={tab.value}
             onClick={() => setActiveTab(tab.value)}
-            className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl whitespace-nowrap transition-all flex-1 text-center ${
+            className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl whitespace-nowrap transition-all flex-1 text-center cursor-pointer ${
               activeTab === tab.value
                 ? 'bg-blue-900 text-white shadow-md'
                 : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
@@ -97,7 +99,7 @@ const OrderList = ({ userId = 1 }) => {
             <div key={i} className="bg-white h-36 rounded-3xl animate-pulse border border-slate-100 shadow-sm" />
           ))}
         </div>
-      ) : filteredOrders.length === 0 ? (
+      ) : myOrders.length === 0 ? (
         /* Trạng thái trống (Empty State) */
         <div className="bg-white rounded-3xl p-16 border border-slate-100 shadow-sm flex flex-col items-center justify-center text-center">
           <div className="p-4 bg-slate-50 text-slate-400 rounded-full mb-4">
@@ -111,7 +113,8 @@ const OrderList = ({ userId = 1 }) => {
       ) : (
         /* DANH SÁCH ĐƠN HÀNG THỰC TẾ */
         <div className="space-y-4">
-          {filteredOrders.map(order => (
+          {/* 🌟 ĐỒNG BỘ: Map trực tiếp qua `myOrders` nhận được từ Store */}
+          {myOrders.map(order => (
             <OrderItem 
               key={order.id} 
               order={order} 

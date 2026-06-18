@@ -76,18 +76,24 @@ export const useBookingStore = create((set, get) => ({
 
   /* ================= UNAVAILABLE ================= */
   fetchUnavailableSlots: async (params = {}, options = {}) => {
-    try {
-      const res = await BookingService.getUnavailableSlots(params, options);
+  try {
+    const res = await BookingService.getUnavailableSlots(
+      {
+        bookingDate: params.date,
+      },
+      options
+    );
 
-      set({
-        unavailableSlots: res?.data || [],
-      });
-      console.log("unavailable: ", res);
-      return res;
-    } catch (err) {
-      set({ error: err.message });
-    }
-  },
+    set({
+      unavailableSlots: res?.data || [],
+    });
+
+    console.log("unavailable:", res);
+    return res;
+  } catch (err) {
+    set({ error: err.message });
+  }
+},
 
   /* ================= CREATE ================= */
   createBooking: async (data, options = {}) => {
@@ -139,32 +145,47 @@ export const useBookingStore = create((set, get) => ({
   },
 
   /* ================= UPDATE ================= */
-  updateBookingStatus: async (id, status, options = {}) => {
-    try {
-      const res = await BookingService.updateBookingStatus(
-        id,
-        status,
-        options
-      );
+ updateBookingStatus: async (id, status, options = {}) => {
+  try {
+    const statusValue =
+      typeof status === "object"
+        ? status.status
+        : status;
 
-      set((state) => ({
-        bookings: state.bookings.map((b) =>
-          String(b.id) === String(id) ? { ...b, status } : b
-        ),
-        myBookings: state.myBookings.map((b) =>
-          String(b.id) === String(id) ? { ...b, status } : b
-        ),
-        currentBooking:
-          String(state.currentBooking?.id) === String(id)
-            ? { ...state.currentBooking, status }
-            : state.currentBooking,
-      }));
+    const res = await BookingService.updateBookingStatus(
+      id,
+      statusValue,
+      options
+    );
 
-      return res;
-    } catch (err) {
-      set({ error: err.message });
-    }
-  },
+    set((state) => ({
+      bookings: state.bookings.map((b) =>
+        String(b.id) === String(id)
+          ? { ...b, status: statusValue }
+          : b
+      ),
+
+      myBookings: state.myBookings.map((b) =>
+        String(b.id) === String(id)
+          ? { ...b, status: statusValue }
+          : b
+      ),
+
+      currentBooking:
+        String(state.currentBooking?.id) === String(id)
+          ? {
+              ...state.currentBooking,
+              status: statusValue,
+            }
+          : state.currentBooking,
+    }));
+
+    return res;
+  } catch (err) {
+    console.error("updateBookingStatus error:", err);
+    set({ error: err.message });
+  }
+},
 
   /* ================= UTIL ================= */
   setCurrentBooking: (b) => set({ currentBooking: b }),

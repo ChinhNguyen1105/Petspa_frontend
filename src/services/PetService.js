@@ -65,11 +65,7 @@ const getMyPets = async (options = {}) => {
   };
 };
 
-/*
-|--------------------------------------------------------------------------
-| GET PETS BY USER (❗ backend chưa có rõ ràng)
-|--------------------------------------------------------------------------
-*/
+
 const getPetsByUser = async (userId, options = {}) => {
   if (shouldUseApi(options)) {
     const resp = await api.get(URL_CONSTANT.Pet.GET_ALL_PETS, {
@@ -161,9 +157,9 @@ export default {
   getPets,
   getPetById,
   getMyPets,
-  getPetsByUser,
   getSpecies,
   createPet,
   updatePet,
   deletePet,
+  getPetsByUser
 };

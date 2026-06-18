@@ -13,16 +13,21 @@ const setApi = (flag) => {
 const shouldUseApi = (options = {}) =>
   options.api !== undefined ? !!options.api : useApi;
 
-/* ───────────────────────── SAFE HELPERS ───────────────────────── */
+/* ───────────────────────── HELPERS ───────────────────────── */
+
 const safeArray = (arr) => (Array.isArray(arr) ? arr : []);
 
 /* ───────────────────────── GET ALL ORDERS ───────────────────────── */
+
 const getOrders = async (params = {}, options = {}) => {
   if (shouldUseApi(options)) {
-    const res = await api.get(URL_CONSTANT.Order.GET_ALL_ORDERS, {
-      params,
-    });
-    console.log("getOrders", res.data);
+    const res = await api.get(
+      URL_CONSTANT.Order.GET_ALL_ORDERS,
+      {
+        params,
+      }
+    );
+
     return res.data;
   }
 
@@ -30,16 +35,26 @@ const getOrders = async (params = {}, options = {}) => {
 
   return {
     success: true,
-    data: { result: [], meta: { total: 0 } },
+    data: {
+      result: [],
+      meta: {
+        total: 0,
+      },
+    },
   };
 };
 
-/* ───────────────────────── GET ORDER BY ID ───────────────────────── */
+/* ───────────────────────── GET ORDER DETAIL ───────────────────────── */
+
 const getOrderById = async (orderId, options = {}) => {
   if (shouldUseApi(options)) {
     const res = await api.get(
-      URL_CONSTANT.Order.GET_ORDER_DETAIL.replace("{id}", orderId)
+      URL_CONSTANT.Order.GET_ORDER_DETAIL.replace(
+        "{id}",
+        orderId
+      )
     );
+
     return res.data;
   }
 
@@ -51,12 +66,42 @@ const getOrderById = async (orderId, options = {}) => {
   };
 };
 
-/* ───────────────────────── MY ORDERS ───────────────────────── */
-const getMyOrders = async (params = {}, options = {}) => {
+/* ───────────────────────── GET MY ORDERS ───────────────────────── */
+/*
+Backend:
+
+@GetMapping(...)
+public ResponseEntity<?> getMyOrders(
+        @RequestBody ReqOrderStatus status,
+        Pageable pageable)
+
+=> status gửi trong body
+=> page,size,sort gửi query params
+*/
+
+const getMyOrders = async (
+  {
+    status,
+    page = 0,
+    size = 10,
+    sort,
+  } = {},
+  options = {}
+) => {
+  console.log("payload :", { status, sort });
   if (shouldUseApi(options)) {
-    const res = await api.get(URL_CONSTANT.Order.GET_MY_ORDERS, {
-      params,
-    });
+    const res = await api({
+  method: "GET",
+  url: URL_CONSTANT.Order.GET_MY_ORDERS,
+  params: {
+    page,
+    size,
+  },
+  data: {
+    status,
+  },
+});
+
     return res.data;
   }
 
@@ -64,38 +109,50 @@ const getMyOrders = async (params = {}, options = {}) => {
 
   return {
     success: true,
-    data: { result: [] },
+    data: {
+      result: [],
+      meta: null,
+    },
   };
 };
 
 /* ───────────────────────── CREATE ORDER FROM CART ───────────────────────── */
-const createOrder = async (orderData, options = {}) => {
+
+const createOrder = async (
+  orderData,
+  options = {}
+) => {
   const payload = {
     cartItemIds: safeArray(orderData?.cartItemIds),
     addressId: orderData?.addressId,
-    paymentMethod: orderData?.paymentMethod || "COD",
+    paymentMethod:
+      orderData?.paymentMethod || "COD",
   };
 
-  // 🔥 FRONTEND VALIDATION (CHẶN LỖI 400)
   if (!payload.cartItemIds.length) {
-    throw new Error("[ORDER] Bạn chưa chọn sản phẩm");
+    throw new Error(
+      "[ORDER] Bạn chưa chọn sản phẩm"
+    );
   }
 
   if (!payload.addressId) {
-    throw new Error("[ORDER] Thiếu địa chỉ giao hàng");
+    throw new Error(
+      "[ORDER] Thiếu địa chỉ giao hàng"
+    );
   }
 
   if (!payload.paymentMethod) {
-    throw new Error("[ORDER] Thiếu phương thức thanh toán");
+    throw new Error(
+      "[ORDER] Thiếu phương thức thanh toán"
+    );
   }
-
-  console.log("🔥 CREATE ORDER PAYLOAD:", payload);
 
   if (shouldUseApi(options)) {
     const res = await api.post(
       URL_CONSTANT.Order.CREATE_ORDER_FROM_CART,
       payload
     );
+
     return res.data;
   }
 
@@ -113,11 +170,18 @@ const createOrder = async (orderData, options = {}) => {
   };
 };
 
-/* ───────────────────────── UPDATE STATUS ───────────────────────── */
-const updateOrderStatus = async (orderId, status, options = {}) => {
+/* ───────────────────────── UPDATE ORDER STATUS ───────────────────────── */
+
+const updateOrderStatus = async (
+  orderId,
+  status,
+  note = "",
+  options = {}
+) => {
   const payload = {
     orderId,
     status,
+    note,
   };
 
   if (shouldUseApi(options)) {
@@ -125,6 +189,7 @@ const updateOrderStatus = async (orderId, status, options = {}) => {
       URL_CONSTANT.Order.UPDATE_ORDER_STATUS,
       payload
     );
+
     return res.data;
   }
 
@@ -137,11 +202,19 @@ const updateOrderStatus = async (orderId, status, options = {}) => {
 };
 
 /* ───────────────────────── CANCEL ORDER ───────────────────────── */
-const cancelOrder = async (orderId, options = {}) => {
+
+const cancelOrder = async (
+  orderId,
+  options = {}
+) => {
   if (shouldUseApi(options)) {
     const res = await api.patch(
-      URL_CONSTANT.Order.CANCEL_ORDER.replace("{id}", orderId)
+      URL_CONSTANT.Order.CANCEL_ORDER.replace(
+        "{id}",
+        orderId
+      )
     );
+
     return res.data;
   }
 
@@ -149,17 +222,29 @@ const cancelOrder = async (orderId, options = {}) => {
 
   return {
     success: true,
-    data: { id: orderId, status: "CANCELLED" },
+    data: {
+      id: orderId,
+      status: "CANCELLED",
+    },
   };
 };
 
 /* ───────────────────────── PAYMENT ───────────────────────── */
-const payOrder = async (orderId, paymentMethod, options = {}) => {
+
+const payOrder = async (
+  orderId,
+  paymentMethod,
+  options = {}
+) => {
   if (shouldUseApi(options)) {
-    const res = await api.post(URL_CONSTANT.Payment.CREATE_PAYMENT, {
-      orderId,
-      paymentMethod,
-    });
+    const res = await api.post(
+      URL_CONSTANT.Payment.CREATE_PAYMENT,
+      {
+        orderId,
+        paymentMethod,
+      }
+    );
+
     return res.data;
   }
 
@@ -186,5 +271,6 @@ export default {
 
   updateOrderStatus,
   cancelOrder,
+
   payOrder,
 };

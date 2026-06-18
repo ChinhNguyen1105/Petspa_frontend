@@ -6,13 +6,13 @@ import Modal from "../../components/common/Modal";
 import { Button } from "../../components/common/Button";
 import PaymentModal from "../../components/common/PaymentModal";
 import BookingForm from "../../components/form/BookingForm";
-import ServiceCard from "../../components/ui/ServiceCard"; // 🌟 Import ServiceCard phục vụ khối gợi ý
+import ServiceCard from "../../components/ui/ServiceCard";
 
 import { useAuthStore } from "../../store/authStore";
 import { useServiceStore } from "../../store/serviceStore";
 import { usePetStore } from "../../store/petStore";
 import { useBookingStore } from "../../store/bookingStore";
-import useRecommendationStore from "../../store/apioriStore"; // 🌟 Import Apriori Store
+import useRecommendationStore from "../../store/apioriStore";
 import { SLOT_TIMES } from "../../constants";
 
 const BookingCreate = () => {
@@ -30,19 +30,18 @@ const BookingCreate = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
   const { services, fetchServices, loading: loadingServices } = useServiceStore();
-  const { pets, fetchPets, loading: loadingPets } = usePetStore();
+  const { myPets, fetchMyPets, loading: loadingPets } = usePetStore();
 
   const {
     bookings,
-    fetchBookings, // Lấy lịch sử booking để làm dữ liệu đầu vào cho hệ thuật toán
+    fetchBookings,
     submitting,
     createBooking,
-    bookedSlots, 
+    unavailableSlots,
     loadingSlots,
     fetchUnavailableSlots,
   } = useBookingStore();
 
-  // 🌟 STORES APRIORI RECOMMENDATION
   const {
     productRecommendations: serviceRecommendations,
     fetchProductRecommendations: fetchServiceRecommendations,
@@ -56,7 +55,7 @@ const BookingCreate = () => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [createdBookingData, setCreatedBookingData] = useState(null);
   const [errors, setErrors] = useState({});
-  const [recommendedList, setRecommendedList] = useState([]); // Lưu danh sách dịch vụ gợi ý đã map thành công
+  const [recommendedList, setRecommendedList] = useState([]);
 
   const [formData, setFormData] = useState({
     serviceIds: initialServiceId ? [initialServiceId] : [],
@@ -66,7 +65,7 @@ const BookingCreate = () => {
     note: "",
   });
 
-  // ─── DERIVED STATES ───
+  // ─── DERIVED ───
   const servicesReady = services?.length > 0;
   const bookingsReady = bookings?.length > 0;
 
@@ -82,77 +81,63 @@ const BookingCreate = () => {
   );
   const slotsNeeded = Math.ceil(totalDuration / 30);
 
-  // ─── HELPER: tính endTime dựa trên startTime + totalDuration ───
+  // ─── HELPER: tính endTime ───
   const computeEndTime = useCallback(
     (startTime) => {
       if (!startTime) return undefined;
-
       const [h, m] = startTime.split(":").map(Number);
       const startMinutes = h * 60 + m;
       const endMinutes = startMinutes + totalDuration;
-
       const endH = Math.floor(endMinutes / 60) % 24;
       const endM = endMinutes % 60;
-
-      return `${String(endH).padStart(2, "0")}:${String(endM).padStart(
-        2,
-        "0"
-      )}`;
+      return `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}`;
     },
     [totalDuration]
   );
 
-  // ─── EFFECTS ĐỒNG BỘ DỮ LIỆU BAN ĐẦU ───
+  // ─── FETCH INITIAL DATA ───
   useEffect(() => {
     fetchServices();
-    fetchPets({
-      keyword: "",
-      speciesId: null,
-      gender: null,
-      ownerId: null,
-    });
-    // Lấy lịch sử các giao dịch đặt lịch trước đó của hệ thống / tài khoản
+    fetchMyPets({ keyword: "", speciesId: null, gender: null, ownerId: null });
     if (!bookings?.length && typeof fetchBookings === "function") {
       fetchBookings({ page: 1, pageSize: 10 });
     }
-  }, [fetchServices, fetchPets, bookings, fetchBookings]);
+  }, [fetchServices, fetchMyPets, bookings, fetchBookings]);
 
-  // 🌟 APRIORI FLOW: BÓC TÁCH ID DỊCH VỤ CŨ & CALL API RECOMMENDATION
+  // ─── APRIORI: extract service IDs from booking history → fetch recommendations ───
   useEffect(() => {
     if (!bookingsReady) return;
-
     const serviceIds = Array.from(
       new Set(
         bookings
-          .flatMap(booking => {
+          .flatMap((booking) => {
             const items = booking.bookingDetails || booking.services || booking.items || [];
-            return items.map(item => item.serviceId || item.service?.id || item.id);
+            return items.map((item) => item.serviceId || item.service?.id || item.id);
           })
           .filter(Boolean)
-    ));
-
+      )
+    );
     if (serviceIds.length > 0) {
-      fetchServiceRecommendations(serviceIds).catch(err =>
-        console.error("[APRIORI SPA ERROR]:", err)
+      fetchServiceRecommendations(serviceIds).catch((err) =>
+        console.error("[APRIORI ERROR]:", err)
       );
     }
   }, [bookingsReady, fetchServiceRecommendations]);
 
-  // 🌟 APRIORI FLOW: MAPPING ID RECOMMENDATION THÀNH OBJECT DỊCH VỤ CHI TIẾT
+  // ─── APRIORI: map recommendation IDs → service objects ───
   useEffect(() => {
     if (!serviceRecommendations?.length || !servicesReady) return;
-
     const mapped = serviceRecommendations
-      .map(id => services.find(s => String(s.id) === String(id)))
+      .map((id) => services.find((s) => String(s.id) === String(id)))
       .filter(Boolean)
-      .slice(0, 4); // Giới hạn tối đa hiển thị 4 dịch vụ mua kèm phù hợp
-
+      .slice(0, 4);
     setRecommendedList(mapped);
-  }, [serviceRecommendations, servicesReady]);
+  }, [serviceRecommendations, servicesReady, services]);
 
-  // Khi chưa chọn ngày → hiển thị toàn bộ slot
+  // ─── DATE CHANGE: reset time, fetch unavailable slots ───
   useEffect(() => {
     if (!formData.date) {
+      // Không có ngày → hiển thị toàn bộ slot trống
       setSlots(
         SLOT_TIMES.map((slot) => ({
           start_time: slot.startTime,
@@ -164,124 +149,104 @@ const BookingCreate = () => {
       return;
     }
 
-    setFormData((prev) => (prev.time ? { ...prev, time: "" } : prev));
-
-    fetchUnavailableSlots({
-      date: formData.date,
-    });
+    // Reset time trước khi fetch — tránh inBlock stale khi unavailableSlots chưa về
+    setFormData((prev) => ({ ...prev, time: "" }));
+    fetchUnavailableSlots({ date: formData.date });
   }, [formData.date, fetchUnavailableSlots]);
 
-  // Reset giờ khi thay đổi dịch vụ (duration thay đổi)
+  // ─── SERVICE CHANGE: reset time khi duration thay đổi ───
   useEffect(() => {
     setFormData((prev) => (prev.time ? { ...prev, time: "" } : prev));
   }, [slotsNeeded]);
 
-  // Đồng bộ SLOT_TIMES với bookedSlots từ backend
+  // ─── SYNC slots với unavailableSlots từ backend ───
+  // FIX: reset time TRƯỚC khi cập nhật slots, đảm bảo inBlock không còn stale
   useEffect(() => {
-    const bookedTimes = new Set(
-      (bookedSlots || []).map((slot) => slot.startTime).filter(Boolean)
-    );
+  if (!formData.date) return;
 
-    const mappedSlots = SLOT_TIMES.map((slot) => {
-      const isBooked = bookedTimes.has(slot.startTime);
+  setFormData((prev) => ({ ...prev, time: "" }));
 
-      return {
-        start_time: slot.startTime,
-        end_time: slot.endTime,
-        available: !isBooked,
-        reason: isBooked ? "BOOKED" : null,
-      };
+  // FIX: mark unavailable tất cả slot bị overlap với booking [startTime, endTime]
+  const mappedSlots = SLOT_TIMES.map((slot) => {
+    const isBooked = (unavailableSlots || []).some((booking) => {
+      // Slot bị block nếu slot.startTime < booking.endTime VÀ slot.endTime > booking.startTime
+      return slot.startTime < booking.endTime && slot.endTime > booking.startTime;
     });
 
-    setSlots(mappedSlots);
-  }, [bookedSlots]);
+    return {
+      start_time: slot.startTime,
+      end_time: slot.endTime,
+      available: !isBooked,
+      reason: isBooked ? "BOOKED" : null,
+    };
+  });
+
+  setSlots(mappedSlots);
+}, [unavailableSlots]);  // formData.date KHÔNG vào dep — chỉ trigger khi server trả data về
 
   // ─── SLOT VALIDATION ───
   const checkConsecutiveSlots = useCallback(
     (startIndex) => {
       if (startIndex < 0 || startIndex + slotsNeeded > slots.length) {
-        return {
-          available: false,
-          reason: "OVER_WORKING_HOURS",
-        };
+        return { available: false, reason: "OVER_WORKING_HOURS" };
       }
-
       for (let i = 0; i < slotsNeeded; i++) {
         const slot = slots[startIndex + i];
-
         if (!slot?.available) {
           return {
             available: false,
-            reason:
-              i === 0
-                ? slot.reason || "BOOKED"
-                : "INSUFFICIENT_CONSECUTIVE_SLOTS",
+            reason: i === 0
+              ? slot.reason || "BOOKED"
+              : "INSUFFICIENT_CONSECUTIVE_SLOTS",
           };
         }
       }
-
       return { available: true };
     },
     [slots, slotsNeeded]
   );
 
-  // Chọn slot thủ công
+  // ─── SELECT SLOT ───
   const handleSelectSlot = (slot, index) => {
     const result = checkConsecutiveSlots(index);
-
     if (result.available) {
-      setFormData((prev) => ({
-        ...prev,
-        time: slot.start_time,
-      }));
+      setFormData((prev) => ({ ...prev, time: slot.start_time }));
     }
   };
 
-  // Tự động chọn slot đầu tiên khả dụng
+  // ─── AUTO-SELECT: chọn slot khả dụng đầu tiên sau khi slots cập nhật ───
   useEffect(() => {
     if (!formData.date) return;
     if (!formData.serviceIds.length) return;
-    if (formData.time) return;
+    if (formData.time) return;   // đã có time → không override
     if (!slots.length) return;
 
     for (let i = 0; i < slots.length; i++) {
       const result = checkConsecutiveSlots(i);
-
       if (result.available) {
-        setFormData((prev) => ({
-          ...prev,
-          time: slots[i].start_time,
-        }));
+        setFormData((prev) => ({ ...prev, time: slots[i].start_time }));
         break;
       }
     }
-  }, [
-    slots,
-    slotsNeeded,
-    formData.date,
-    formData.serviceIds,
-    formData.time,
-    checkConsecutiveSlots,
-  ]);
+  }, [slots, slotsNeeded, formData.date, formData.serviceIds, formData.time, checkConsecutiveSlots]);
 
+  // ─── SERVICE TOGGLE ───
   const handleServiceToggle = (id) => {
     setFormData((prev) => {
       const strId = id.toString();
       const newServiceIds = prev.serviceIds.includes(strId)
         ? prev.serviceIds.filter((i) => i !== strId)
         : [...prev.serviceIds, strId];
-
       return { ...prev, serviceIds: newServiceIds, time: "" };
     });
   };
 
-  // Tương tác trực tiếp khi người dùng click "Đặt lịch" tại Khối Gợi ý mua kèm
   const handleSelectRecommendedService = (id) => {
     handleServiceToggle(id);
-    // Cuộn mượt mà lên khu vực chính biểu mẫu để người dùng thấy dịch vụ đã được tick chọn
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // ─── SUBMIT ───
   const handleSubmit = async (e) => {
     e?.preventDefault?.();
     setErrors({});
@@ -321,16 +286,13 @@ const BookingCreate = () => {
         setCreatedBookingData({ id: response.data?.id, amount: totalAmount });
         setIsPaymentModalOpen(true);
       } else {
-        setErrors({
-          submit: response?.message || "Hệ thống từ chối tạo lịch hẹn.",
-        });
+        setErrors({ submit: response?.message || "Hệ thống từ chối tạo lịch hẹn." });
       }
     } catch {
       setErrors({ submit: "Đã xảy ra lỗi hệ thống. Xin thử lại sau!" });
     }
   };
 
-  // 🌟 Kiểm tra trạng thái đang tính toán gợi ý của Apriori
   const isRecLoading = recLoading && recommendedList.length === 0;
 
   return (
@@ -353,7 +315,7 @@ const BookingCreate = () => {
             errors={errors}
             setErrors={setErrors}
             services={services}
-            pets={pets}
+            pets={myPets}
             slots={slots}
             loadingSlots={loadingSlots}
             isAuthenticated={isAuthenticated}
@@ -369,7 +331,7 @@ const BookingCreate = () => {
           />
         </div>
 
-        {/* 🌟 KHỐI TÍCH HỢP HỆ THỐNG GỢI Ý ĐẶT KÈM (APRIORI SYSTEM) */}
+        {/* APRIORI RECOMMENDATION BLOCK */}
         {isRecLoading ? (
           <div className="flex flex-col items-center justify-center py-10 text-gray-400 gap-2 bg-white rounded-3xl border border-gray-100">
             <Loader2 className="animate-spin text-pet-blue" size={28} />
@@ -403,18 +365,15 @@ const BookingCreate = () => {
                   <div className="absolute -top-1.5 -left-1.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-[9px] font-black px-2 py-0.5 rounded shadow-sm z-10 uppercase tracking-wider">
                     Gợi ý đặt kèm ✨
                   </div>
-                  {/* Truyền callback handleSelectRecommendedService vào prop onBookingClick của ServiceCard */}
-                  <ServiceCard 
-                    service={service} 
-                    onBookingClick={() => handleSelectRecommendedService(service.id)} 
+                  <ServiceCard
+                    service={service}
+                    onBookingClick={() => handleSelectRecommendedService(service.id)}
                   />
                 </div>
               ))}
             </div>
           </div>
-        ) : !recError && (
-          console.log("[FINAL UI] Không tìm thấy dịch vụ gợi ý tương thích từ Apriori.")
-        )}
+        ) : null}
       </div>
 
       {/* Success Modal */}

@@ -41,8 +41,10 @@ const BookingForm = ({
   submitting = false,
   loading = false,
 }) => {
+
+  console.log("slots false:", slots);
   const [step, setStep] = useState(1);
-  console.log(slots);
+
   // ─── DERIVED ──────────────────────────────────────────────────────
   const selectedServices = useMemo(
     () => services.filter((s) => formData.serviceIds.includes(s.id.toString())),
@@ -56,6 +58,15 @@ const BookingForm = ({
         : -1,
     [formData.time, slots]
   );
+
+  // FIX: inBlock chỉ true khi TẤT CẢ slot trong block đều available
+  // Ngăn highlight stale khi unavailableSlots chưa kịp reset time
+  const isBlockValid = useMemo(() => {
+    if (selectedStartIndex < 0) return false;
+    return slots
+      .slice(selectedStartIndex, selectedStartIndex + slotsNeeded)
+      .every((s) => s?.available);
+  }, [selectedStartIndex, slotsNeeded, slots]);
 
   // ─── STEP VALIDATION ──────────────────────────────────────────────
   const validateStep = (s) => {
@@ -164,27 +175,16 @@ const BookingForm = ({
                         ? "border-orange-400 bg-orange-50/60 shadow-sm"
                         : "border-gray-100 bg-white hover:border-gray-200"}`}
                   >
-                    {/* thumbnail */}
                     <div className="w-14 h-14 rounded-xl overflow-hidden shrink-0 bg-gray-100">
                       {thumb ? (
-                        <img
-                          src={thumb}
-                          alt={s.name}
-                          className="w-full h-full object-cover"
-                        />
+                        <img src={thumb} alt={s.name} className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-2xl">
-                          🐾
-                        </div>
+                        <div className="w-full h-full flex items-center justify-center text-2xl">🐾</div>
                       )}
                     </div>
 
-                    {/* info */}
                     <div className="flex-1 min-w-0">
-                      <p
-                        className={`text-sm font-black truncate
-                          ${checked ? "text-orange-700" : "text-gray-800"}`}
-                      >
+                      <p className={`text-sm font-black truncate ${checked ? "text-orange-700" : "text-gray-800"}`}>
                         {s.name}
                       </p>
                       <div className="flex items-center gap-2 mt-0.5">
@@ -204,12 +204,9 @@ const BookingForm = ({
                       </p>
                     </div>
 
-                    {/* checkbox */}
                     <div
                       className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all
-                        ${checked
-                          ? "bg-orange-500 border-orange-500"
-                          : "border-gray-300"}`}
+                        ${checked ? "bg-orange-500 border-orange-500" : "border-gray-300"}`}
                     >
                       {checked && <CheckCircle2 size={12} className="text-white" />}
                     </div>
@@ -218,7 +215,6 @@ const BookingForm = ({
               })}
             </div>
 
-            {/* Summary bar */}
             {selectedServices.length > 0 && (
               <div className="p-3 bg-orange-50 rounded-xl border border-orange-100 flex items-center justify-between">
                 <div>
@@ -259,10 +255,7 @@ const BookingForm = ({
                         key={p.id}
                         type="button"
                         onClick={() =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            petId: p.id.toString(),
-                          }))
+                          setFormData((prev) => ({ ...prev, petId: p.id.toString() }))
                         }
                         className={`p-3 rounded-xl border-2 text-left transition-all
                           ${sel
@@ -270,22 +263,14 @@ const BookingForm = ({
                             : "border-gray-100 bg-white hover:border-gray-200"}`}
                       >
                         <div className="flex items-center gap-2">
-                          <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center text-lg
-                              ${sel ? "bg-orange-100" : "bg-gray-100"}`}
-                          >
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg ${sel ? "bg-orange-100" : "bg-gray-100"}`}>
                             {p.specie === "Cat" ? "🐱" : "🐶"}
                           </div>
                           <div className="min-w-0">
-                            <p
-                              className={`text-xs font-black truncate
-                                ${sel ? "text-orange-700" : "text-gray-700"}`}
-                            >
+                            <p className={`text-xs font-black truncate ${sel ? "text-orange-700" : "text-gray-700"}`}>
                               {p.name}
                             </p>
-                            <p className="text-[10px] text-gray-400 font-medium truncate">
-                              {p.specie}
-                            </p>
+                            <p className="text-[10px] text-gray-400 font-medium truncate">{p.specie}</p>
                           </div>
                         </div>
                       </button>
@@ -311,11 +296,7 @@ const BookingForm = ({
                 min={new Date().toISOString().split("T")[0]}
                 value={formData.date}
                 onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    date: e.target.value,
-                    time: "",
-                  }))
+                  setFormData((prev) => ({ ...prev, date: e.target.value, time: "" }))
                 }
                 className={`w-full p-3 rounded-xl border outline-none bg-white font-semibold text-sm text-gray-700
                   focus:border-orange-400 transition-colors
@@ -360,11 +341,16 @@ const BookingForm = ({
                   {slots.map((slot, idx) => {
                     const evaluation = checkConsecutiveSlots(idx);
                     const canStart   = slot.available && evaluation.available;
-                    const inBlock    =
+
+                    // FIX: inBlock chỉ active khi block hiện tại còn hợp lệ (isBlockValid)
+                    // Tránh highlight stale sau khi unavailableSlots cập nhật
+                    const inBlock =
+                      isBlockValid &&
                       selectedStartIndex >= 0 &&
                       idx >= selectedStartIndex &&
                       idx < selectedStartIndex + slotsNeeded;
-                    const isStart    = formData.time === slot.start_time;
+
+                    const isStart = formData.time === slot.start_time;
 
                     return (
                       <button
@@ -396,10 +382,7 @@ const BookingForm = ({
                           </span>
                         </span>
                         {inBlock && (
-                          <span
-                            className={`text-[8px] font-semibold mt-1 leading-none
-                              ${isStart ? "text-orange-100" : "text-orange-200"}`}
-                          >
+                          <span className={`text-[8px] font-semibold mt-1 leading-none ${isStart ? "text-orange-100" : "text-orange-200"}`}>
                             {isStart ? "Bắt đầu" : "Tiếp theo"}
                           </span>
                         )}
@@ -453,9 +436,7 @@ const BookingForm = ({
               </p>
               {selectedServices.map((s) => (
                 <div key={s.id} className="flex items-center justify-between">
-                  <span className="text-sm text-gray-700 font-semibold">
-                    {s.name}
-                  </span>
+                  <span className="text-sm text-gray-700 font-semibold">{s.name}</span>
                   <span className="text-sm font-black text-orange-600">
                     {formatPrice(s.basePrice || s.price)}
                   </span>
@@ -513,7 +494,9 @@ const BookingForm = ({
                 </p>
                 <p className="text-sm font-black text-gray-800">
                   {formData.time || "—"}
-                  {selectedStartIndex >= 0 &&
+                  {/* FIX: chỉ hiển thị end_time khi block hợp lệ */}
+                  {isBlockValid &&
+                    selectedStartIndex >= 0 &&
                     slots[selectedStartIndex + slotsNeeded - 1] &&
                     ` – ${slots[selectedStartIndex + slotsNeeded - 1].end_time}`}
                 </p>
@@ -530,7 +513,6 @@ const BookingForm = ({
               </div>
             )}
 
-            {/* Submit error */}
             {errors.submit && (
               <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-center gap-2 text-xs font-semibold text-red-600">
                 <AlertCircle size={14} /> {errors.submit}

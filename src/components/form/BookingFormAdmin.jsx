@@ -6,66 +6,62 @@ import {
   Plus,
   X,
   Notebook,
-  CheckCircle2
+  CheckCircle2,
+  Mail
 } from 'lucide-react';
 
 import validateBookingForm from '../../utils/bookingValidator';
 
 import { useBookingStore } from '../../store/bookingStore';
 import { useServiceStore } from '../../store/serviceStore';
-import { useUserStore }    from '../../store/userStore';
+import { useUserStore } from '../../store/userStore';
 import { usePetStore } from '../../store/petStore';
 import { SLOT_TIMES } from '../../constants';
 
-// Chuyển "HH:mm:ss" hoặc "HH:mm" về số phút trong ngày để so sánh
 const toMinutes = (timeStr) => {
   if (!timeStr) return null;
   const [h, m] = timeStr.split(':').map(Number);
   return h * 60 + m;
 };
 
-// Kiểm tra 2 khoảng [aStart, aEnd) và [bStart, bEnd) có overlap không
 const isOverlap = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && bStart < aEnd;
 
 const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
   // ─── STORE DATA ──────────────────────────────────────────────────────────────
-  const { services, fetchServices }      = useServiceStore();
-  const { users, fetchUsers }            = useUserStore();
-  const { fetchUnavailableSlots }        = useBookingStore();
-  const {
-    pets,
-    fetchPetsByUser,
-    loading: loadingPets,
-  } = usePetStore();
+  const { services, fetchServices } = useServiceStore();
+  const { users, fetchUsers }       = useUserStore();
+  const { unavailableSlots, fetchUnavailableSlots } = useBookingStore();
+  const { pets, fetchPetsByUser, loading: loadingPets } = usePetStore();
 
   // ─── LOCAL UI STATE ──────────────────────────────────────────────────────────
-  const [slots, setSlots]               = useState([]);
-  const [loading, setLoading]           = useState(true);
+  const [slots,        setSlots]        = useState([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
-  const [formErrors, setFormErrors]     = useState({});
-  const [userError, setUserError]       = useState('');
+  const [formErrors,   setFormErrors]   = useState({});
+  const [userError,    setUserError]    = useState('');
 
-  // Form data
+  // ✅ FIX: Khởi tạo loading=true chỉ khi data chưa có
+  // Nếu services + users đã ở trong store, form render ngay không cần loading
+  const needsInit = !services?.length || !users?.length;
+  const [loading, setLoading] = useState(needsInit);
+
+  // ─── FORM STATE ───────────────────────────────────────────────────────────────
   const [formData, setFormData] = useState({
-    userId:     initialData?.user?.id ?? '',
-    petId:      initialData?.pet?.id  ?? '',
+    userEmail:  initialData?.user?.email  ?? '',
+    petId:      initialData?.pet?.id      ?? '',
     date:       initialData?.bookingDate  || '',
     time:       initialData?.startTime    || '',
     note:       initialData?.note         || '',
     serviceIds: initialData?.services?.map(s => s.id.toString()) || [],
   });
 
-  // ─── MATCHED USER (tra theo userId nhập tay) ───────────────────────────────
+  // ─── MATCHED USER ─────────────────────────────────────────────────────────────
   const matchedUser = useMemo(() => {
-    const userId = formData.userId?.toString().trim();
-    if (!userId) return undefined;
+    const email = formData.userEmail?.trim().toLowerCase();
+    if (!email) return undefined;
+    return users.find((u) => u.email?.toLowerCase() === email);
+  }, [users, formData.userEmail]);
 
-    return users.find(
-      (u) => String(u.id).trim() === userId
-    );
-  }, [users, formData.userId]);
-
-  // ─── TÍNH TOÁN GIÁ TRỊ PHÁT SINH ────────────────────────────────────────────
+  // ─── DERIVED ─────────────────────────────────────────────────────────────────
   const selectedServices = useMemo(
     () => services.filter(s => formData.serviceIds.includes(s.id.toString())),
     [services, formData.serviceIds]
@@ -83,96 +79,124 @@ const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
 
   const slotsNeeded = Math.ceil(totalDuration / 30);
 
-  // ─── FETCH METADATA BAN ĐẦU TỪ STORES ──────────────────────────────────────
+  // ─── FETCH METADATA: chỉ fetch khi thực sự cần ───────────────────────────────
   useEffect(() => {
+    // Nếu data đã có đủ, bỏ qua
+    if (!needsInit) return;
+
+    let cancelled = false;
     const init = async () => {
-      setLoading(true);
-      await Promise.all([fetchServices(), fetchUsers()]);
-      setLoading(false);
+      try {
+        const tasks = [];
+        if (!services?.length) tasks.push(fetchServices());
+        if (!users?.length)    tasks.push(fetchUsers());
+        await Promise.all(tasks);
+      } catch (err) {
+        console.error('Error initializing form:', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
+
     init();
-  }, [fetchServices, fetchUsers]);
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── KIỂM TRA USER ID HỢP LỆ ────────────────────────────────────────────────
+  // ─── VALIDATE USER EMAIL ─────────────────────────────────────────────────────
   useEffect(() => {
-    if (!formData.userId) {
-      setUserError('');
-      return;
-    }
-    if (!matchedUser) {
-      setUserError('Không tìm thấy người dùng với ID này.');
-    } else {
-      setUserError('');
-    }
-  }, [formData.userId, matchedUser]);
+    if (!formData.userEmail) { setUserError(''); return; }
+    setUserError(matchedUser ? '' : 'Không tìm thấy người dùng với email này.');
+  }, [formData.userEmail, matchedUser]);
 
-  // ─── TỰ ĐỘNG LỌC PET THEO USER ID ───────────────────────────────────────────
+const filteredPets = useMemo(() => {
+  if (!matchedUser?.id) return [];
+
+  return pets.filter(
+    (pet) => String(pet.ownerId) === String(matchedUser.id)
+  );
+}, [pets, matchedUser?.id]);
+
+  // ─── AUTO FETCH PETS KHI USER THAY ĐỔI ──────────────────────────────────────
   useEffect(() => {
+
     if (!matchedUser) return;
-
     if (
       !initialData ||
-      formData.userId.toString() !== initialData?.user?.id?.toString()
+      formData.userEmail?.toLowerCase() !== initialData?.user?.email?.toLowerCase()
     ) {
-      setFormData((prev) => ({
-        ...prev,
-        petId: "",
-      }));
+      setFormData((prev) => ({ ...prev, petId: '' }));
     }
-
     fetchPetsByUser(matchedUser.id);
+    
   }, [matchedUser, initialData, fetchPetsByUser]);
 
-  // ─── FETCH SLOTS THEO NGÀY (dựa trên SLOT_TIMES + unavailableSlots) ─────────
+
+  // ─── FETCH SLOTS KHI NGÀY THAY ĐỔI ──────────────────────────────────────────
   useEffect(() => {
     if (!formData.date) {
-      setSlots([]);
+      setSlots(
+        SLOT_TIMES.map((slot) => ({
+          start_time: slot.startTime,
+          end_time:   slot.endTime,
+          available:  true,
+          reason:     null,
+        }))
+      );
       return;
     }
 
-    let isCancelled = false;
+    setFormData((prev) => ({ ...prev, time: '' }));
+
+    let cancelled = false;
     const loadSlots = async () => {
       setLoadingSlots(true);
       try {
-        const res = await fetchUnavailableSlots({ bookingDate: formData.date });
-        if (isCancelled) return;
-
+        const res        = await fetchUnavailableSlots({ date: formData.date });
+        if (cancelled) return;
         const unavailable = res?.data || [];
 
         const computedSlots = SLOT_TIMES.map((slotTime) => {
           const slotStart = toMinutes(slotTime.startTime);
           const slotEnd   = toMinutes(slotTime.endTime);
-
-          const isBooked = unavailable.some((u) => {
+          const isBooked  = unavailable.some((u) => {
             const uStart = toMinutes(u.startTime);
             const uEnd   = toMinutes(u.endTime);
             return isOverlap(slotStart, slotEnd, uStart, uEnd);
           });
-
           return {
-            startTime: slotTime.startTime,
-            endTime:   slotTime.endTime,
-            available: !isBooked,
-            reason:    isBooked ? 'BOOKED' : null,
+            start_time: slotTime.startTime,
+            end_time:   slotTime.endTime,
+            available:  !isBooked,
+            reason:     isBooked ? 'BOOKED' : null,
           };
         });
 
         setSlots(computedSlots);
       } catch (err) {
-        if (!isCancelled) {
+        if (!cancelled) {
           console.error('Lỗi lấy danh sách khung giờ trống:', err);
-          setSlots([]);
+          setSlots(SLOT_TIMES.map((slot) => ({
+            start_time: slot.startTime,
+            end_time:   slot.endTime,
+            available:  true,
+            reason:     null,
+          })));
         }
       } finally {
-        if (!isCancelled) setLoadingSlots(false);
+        if (!cancelled) setLoadingSlots(false);
       }
     };
 
     loadSlots();
-    return () => { isCancelled = true; };
+    return () => { cancelled = true; };
   }, [formData.date, fetchUnavailableSlots]);
 
-  // ─── THUẬT TOÁN KIỂM TRA N SLOT LIÊN TIẾP ───────────────────────────────────
+  // ─── RESET TIME KHI SERVICE THAY ĐỔI ─────────────────────────────────────────
+  useEffect(() => {
+    setFormData((prev) => (prev.time ? { ...prev, time: '' } : prev));
+  }, [slotsNeeded]);
+
+  // ─── KIỂM TRA N SLOT LIÊN TIẾP ───────────────────────────────────────────────
   const checkConsecutiveSlots = useCallback((startIndex) => {
     if (startIndex < 0 || startIndex >= slots.length)
       return { available: false, reason: 'INVALID_INDEX' };
@@ -184,7 +208,7 @@ const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
       const isOwnCurrentSlot =
         initialData &&
         formData.date === initialData.bookingDate &&
-        slot.startTime === initialData.startTime;
+        slot.start_time === initialData.startTime;
 
       if (!slot.available && !isOwnCurrentSlot) {
         return {
@@ -197,28 +221,40 @@ const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
   }, [slots, slotsNeeded, initialData, formData.date]);
 
   const selectedStartIndex = useMemo(
-    () => formData.time ? slots.findIndex(s => s.startTime === formData.time) : -1,
+    () => formData.time ? slots.findIndex(s => s.start_time === formData.time) : -1,
     [formData.time, slots]
   );
 
-  useEffect(() => {
-    if (selectedStartIndex !== -1) {
-      const evaluation = checkConsecutiveSlots(selectedStartIndex);
-      if (!evaluation.available) setFormData(prev => ({ ...prev, time: '' }));
-    }
-  }, [slotsNeeded, slots, selectedStartIndex, checkConsecutiveSlots]);
+  const isBlockValid = useMemo(() => {
+    if (selectedStartIndex < 0) return false;
+    return slots
+      .slice(selectedStartIndex, selectedStartIndex + slotsNeeded)
+      .every((s) => {
+        if (!s) return false;
+        const isOwnCurrentSlot =
+          initialData &&
+          formData.date === initialData.bookingDate &&
+          s.start_time === initialData.startTime;
+        return s.available || isOwnCurrentSlot;
+      });
+  }, [selectedStartIndex, slotsNeeded, slots, initialData, formData.date]);
 
-  // Auto-select earliest available consecutive block
+  useEffect(() => {
+    if (selectedStartIndex !== -1 && !isBlockValid) {
+      setFormData(prev => ({ ...prev, time: '' }));
+    }
+  }, [slotsNeeded, slots, selectedStartIndex, isBlockValid]);
+
+  // Auto-select slot khả dụng đầu tiên
   useEffect(() => {
     if (!formData.date) return;
-    if (!formData.serviceIds || formData.serviceIds.length === 0) return;
-    if (formData.time) return; // keep user selection
-    if (!slots || slots.length === 0) return;
+    if (!formData.serviceIds.length) return;
+    if (formData.time) return;
+    if (!slots.length) return;
 
     for (let i = 0; i < slots.length; i++) {
-      const evaluation = checkConsecutiveSlots(i);
-      if (evaluation.available) {
-        setFormData(prev => ({ ...prev, time: slots[i].startTime }));
+      if (checkConsecutiveSlots(i).available) {
+        setFormData(prev => ({ ...prev, time: slots[i].start_time }));
         break;
       }
     }
@@ -228,50 +264,45 @@ const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
   const handleServiceToggle = (serviceIdStr) => {
     setFormData(prev => {
       const isExist = prev.serviceIds.includes(serviceIdStr);
-      const updatedIds = isExist
-        ? prev.serviceIds.filter(id => id !== serviceIdStr)
-        : [...prev.serviceIds, serviceIdStr];
-      return { ...prev, serviceIds: updatedIds };
+      return {
+        ...prev,
+        serviceIds: isExist
+          ? prev.serviceIds.filter(id => id !== serviceIdStr)
+          : [...prev.serviceIds, serviceIdStr],
+        time: '',
+      };
     });
   };
 
   const handleSelectSlot = (slot, index) => {
-    const evaluation = checkConsecutiveSlots(index);
-    if (!evaluation.available) return;
-    setFormData(prev => ({ ...prev, time: slot.startTime }));
+    if (!checkConsecutiveSlots(index).available) return;
+    setFormData(prev => ({ ...prev, time: slot.start_time }));
   };
 
-  // ─── SUBMIT VỚI VALIDATE ─────────────────────────────────────────────────────
+  // ─── SUBMIT ──────────────────────────────────────────────────────────────────
   const handleFormSubmit = (e) => {
     e.preventDefault();
 
-    const validationPayload = {
-      serviceIds: formData.serviceIds,
-      date:       formData.date,
-      time:       formData.time,
-      customerId: formData.userId,
-      petId:      formData.petId,
-    };
+    const errors = validateBookingForm(
+      {
+        serviceIds:  formData.serviceIds,
+        date:        formData.date,
+        time:        formData.time,
+        customerId:  matchedUser?.id,
+        petId:       formData.petId,
+      },
+      { requireGroomer: false }
+    );
 
-    const errors = validateBookingForm(validationPayload, {
-      requireGroomer: false,
-    });
-
-    if (Object.keys(errors).length > 0) {
-      setFormErrors(errors);
-      return;
-    }
-
+    if (Object.keys(errors).length > 0) { setFormErrors(errors); return; }
     setFormErrors({});
 
-    // Payload khớp ReqCreateBooking: userId, serviceIds, bookingDate, startTime, endTime, petId (optional)
-    // note được giữ lại (không có trong DTO hiện tại nhưng không thay đổi backend theo yêu cầu)
     onSubmit({
       userId:      matchedUser?.id,
       serviceIds:  formData.serviceIds.map(id => Number(id)),
       bookingDate: formData.date,
       startTime:   formData.time,
-      endTime:     slots[selectedStartIndex + slotsNeeded - 1]?.endTime || formData.time,
+      endTime:     slots[selectedStartIndex + slotsNeeded - 1]?.end_time || formData.time,
       petId:       formData.petId ? Number(formData.petId) : null,
       note:        formData.note,
     });
@@ -288,11 +319,12 @@ const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
     }
   };
 
-  // ─── LOADING TOÀN TRANG ──────────────────────────────────────────────────────
+  // ─── LOADING ─────────────────────────────────────────────────────────────────
+  // ✅ FIX: chỉ loading khi thực sự cần fetch, không block nếu data đã có
   if (loading) {
     return (
       <div className="py-12 text-center text-sm font-semibold text-gray-500 animate-pulse">
-        Đang tải cấu hình biểu mẫu toàn hệ thống...
+        Đang tải cấu hình biểu mẫu...
       </div>
     );
   }
@@ -344,7 +376,7 @@ const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
         )}
       </div>
 
-      {/* 2. KHÁCH HÀNG: NHẬP USER ID */}
+      {/* 2. KHÁCH HÀNG */}
       <div className="space-y-4 bg-orange-50/30 p-4 rounded-2xl border border-orange-100/50">
         <label className="block text-xs font-black text-gray-400 uppercase tracking-wider">
           2. Thông tin khách hàng <span className="text-red-500">*</span>
@@ -352,30 +384,28 @@ const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1">
-              User ID <span className="text-red-500">*</span>
+            <label className="block text-xs font-bold text-gray-500 mb-1 flex items-center gap-1">
+              <Mail size={12} /> Email khách <span className="text-red-500">*</span>
             </label>
             <input
-              type="text"
-              placeholder="Ví dụ: USR001"
-              value={formData.userId}
-              onChange={(e) => setFormData(prev => ({ ...prev, userId: e.target.value }))}
+              type="email"
+              placeholder="Ví dụ: customer@email.com"
+              value={formData.userEmail}
+              onChange={(e) => setFormData(prev => ({ ...prev, userEmail: e.target.value }))}
               className={`w-full p-2.5 rounded-xl border outline-none text-sm text-gray-700 focus:border-orange-500 ${
-                formErrors.userId ? 'border-red-400' : 'border-gray-200'
+                formErrors.userEmail ? 'border-red-400' : 'border-gray-200'
               }`}
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1">
-              Kết quả tra cứu
-            </label>
+            <label className="block text-xs font-bold text-gray-500 mb-1">Kết quả tra cứu</label>
             {matchedUser ? (
               <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl flex items-center gap-2 text-xs font-bold">
                 <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
                 <div>
                   <p>{matchedUser.name}</p>
-                  <p className="font-medium text-gray-400 text-[10px]">{matchedUser.email}</p>
+                  <p className="font-medium text-gray-400 text-[10px]">ID: {matchedUser.id}</p>
                 </div>
               </div>
             ) : (
@@ -386,17 +416,13 @@ const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
           </div>
         </div>
 
-        {userError && (
-          <p className="text-xs font-semibold text-red-500 mt-1">{userError}</p>
-        )}
-
+        {userError && <p className="text-xs font-semibold text-red-500 mt-1">{userError}</p>}
         {formErrors.userId && (
           <p className="text-xs font-semibold text-red-500 flex items-center gap-1">
             <AlertCircle size={12} /> {formErrors.userId}
           </p>
         )}
 
-        {/* CHỌN THÚ CƯNG */}
         <div>
           <label className="block text-xs font-bold text-gray-500 mb-1">
             Chọn Thú cưng tương ứng <span className="text-red-500">*</span>
@@ -410,15 +436,15 @@ const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
             disabled={!matchedUser || loadingPets}
           >
             {!matchedUser ? (
-              <option value="">-- Vui lòng nhập User ID hợp lệ trước --</option>
+              <option value="">-- Vui lòng nhập Email hợp lệ trước --</option>
             ) : loadingPets ? (
               <option value="">Đang tải danh sách pet của khách...</option>
-            ) : pets.length === 0 ? (
+            ) : filteredPets.length === 0 ? (
               <option value="">Tài khoản khách này chưa đăng ký Pet nào</option>
             ) : (
               <>
                 <option value="">-- Chọn thú cưng nhận dịch vụ --</option>
-                {pets.map(p => (
+                {filteredPets.map(p => (
                   <option key={p.id} value={p.id}>{p.name} ({p.specie})</option>
                 ))}
               </>
@@ -478,15 +504,18 @@ const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
         ) : (
           <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto p-1 bg-gray-50 rounded-xl border">
             {slots.map((slot, index) => {
-              const evaluation        = checkConsecutiveSlots(index);
-              const isAvailable       = evaluation.available;
-              const reason            = isAvailable ? null : (evaluation.reason || slot.reason);
+              const evaluation = checkConsecutiveSlots(index);
+              const isAvailable = evaluation.available;
+              const reason = isAvailable ? null : (evaluation.reason || slot.reason);
+
               const isInSelectedBlock =
+                isBlockValid &&
                 selectedStartIndex >= 0 &&
                 index >= selectedStartIndex &&
                 index < selectedStartIndex + slotsNeeded;
-              const isActualStart = formData.time === slot.startTime;
-              const badge         = reason ? getReasonBadge(reason) : null;
+
+              const isActualStart = formData.time === slot.start_time;
+              const badge = reason ? getReasonBadge(reason) : null;
 
               return (
                 <button
@@ -504,7 +533,7 @@ const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
                 >
                   <div className="flex items-center justify-between w-full">
                     <span className="text-xs tracking-wide font-bold">
-                      {slot.startTime} – {slot.endTime}
+                      {slot.start_time} – {slot.end_time}
                     </span>
                     {!isAvailable && badge && (
                       <span className={`text-[8px] px-1 py-0.5 rounded font-bold uppercase tracking-wider ${badge.color}`}>
@@ -560,7 +589,7 @@ const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
         </div>
       )}
 
-      {/* FOOTER ACTIONS */}
+      {/* FOOTER */}
       <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 sticky bottom-0 bg-white">
         <button
           type="button"
@@ -571,7 +600,7 @@ const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
         </button>
         <button
           type="submit"
-          disabled={!formData.time}
+          disabled={!formData.time || !matchedUser}
           className="px-5 py-2 bg-orange-500 text-white text-sm font-black rounded-xl hover:bg-opacity-95 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-all"
         >
           Xác nhận lịch đặt

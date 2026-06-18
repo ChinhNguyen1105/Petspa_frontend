@@ -81,17 +81,17 @@ export const useCartStore = create(
       /*
        * ADD ITEM
        */
-      addItem: async (product) => {
+      addItem: async (product, quantity) => {
         try {
           await CartService.addToCart(
             product.id,
-            1
+            quantity
           );
 
           await get().fetchCart();
 
           get().showToast(
-            `Đã thêm ${
+            `Đã thêm ${quantity} ${
               product.name ||
               product.productName
             } vào giỏ hàng`

@@ -17,6 +17,7 @@ const ProductDetail = () => {
   const { id } = useParams();
   const [quantity, setQuantity] = useState(1);
   const [activeImage, setActiveImage] = useState('');
+  const fallbackDefaultImg = 'https://placehold.co/500x500';
 
   const { addItem, showToast } = useCartStore();
 
@@ -30,51 +31,54 @@ const ProductDetail = () => {
   const {
     reviews,
     loading: reviewLoading,
-    getProductReviews,
-    clearReviews, 
+    fetchProductReviews, // 🌟 CẬP NHẬT: Tên hàm mới từ reviewStore
+    resetReviews,        // 🌟 CẬP NHẬT: Tên hàm reset mới từ reviewStore
   } = useReviewStore();
 
   const {
     images: storeImages,
     loading: imagesLoading,
     fetchImages,
+    clearImages,         // 🌟 BỔ SUNG: Dọn dẹp ảnh khi chuyển trang
   } = useProductImageStore();
 
-  // Fetch thông tin chi tiết sản phẩm
+  // 1. Fetch thông tin sản phẩm & dọn dẹp khi Unmount component
   useEffect(() => {
-    if (id) fetchProductById(id);
-    return () => clearCurrentProduct?.();
-  }, [id, fetchProductById, clearCurrentProduct]);
-
-  // Fetch danh sách hình ảnh từ store mới
-  useEffect(() => {
-    if (id) fetchImages(id);
-  }, [id, fetchImages]);
-
-  // Fetch reviews khi sản phẩm tải thành công
-  useEffect(() => {
-    if (product?.id) {
-      getProductReviews(product.id);
+    if (id) {
+      fetchProductById(id);
+      fetchProductReviews(id); // 🌟 CẬP NHẬT: Gọi hàm fetch review mới
+      fetchImages(id);
     }
-    return () => clearReviews?.(); 
-  }, [product?.id, getProductReviews, clearReviews]);
+    
+    return () => {
+      clearCurrentProduct?.();
+      resetReviews?.();        // 🌟 CẬP NHẬT: Dọn dẹp review
+      clearImages?.();         // 🌟 BỔ SUNG: Dọn dẹp mảng ảnh cũ
+    };
+  }, [id, fetchProductById, fetchProductReviews, fetchImages, clearCurrentProduct, resetReviews, clearImages]);
 
-  // Gom danh sách ảnh hiển thị
-  const galleryImages = storeImages && storeImages.length > 0
-    ? storeImages.map(img => img.imageUrl).filter(Boolean)
-    : product?.images?.map(img => img.imageUrl).filter(Boolean) || [];
+  // 2. Gom danh sách hình ảnh mượt mà từ storeImages mới
+  const galleryImages = React.useMemo(() => {
+    const apiImages = storeImages && storeImages.length > 0
+      ? storeImages.map(img => img.imageUrl).filter(Boolean)
+      : product?.images?.map(img => img.imageUrl).filter(Boolean) || [];
+      
+    return apiImages;
+  }, [storeImages, product?.images]);
 
-  // 🔥 SỬA LỖI TẠI ĐÂY: Đồng bộ ảnh hiển thị chính mặc định (Chỉ chạy khi có mảng ảnh mới từ API)
+  // 3. Theo dõi đặt ảnh active mặc định (Ưu tiên ảnh thumbnail/isMain)
   useEffect(() => {
     if (galleryImages.length > 0) {
-      // Ưu tiên tìm ảnh thumbnail từ storeImages trước
-      const thumbnailImg = storeImages?.find(img => img.isThumbnail);
+      const thumbnailImg = storeImages?.find(img => img.isThumbnail || img.isMain);
       const defaultImage = thumbnailImg?.imageUrl || galleryImages[0];
       setActiveImage(defaultImage);
+    } else {
+      setActiveImage(fallbackDefaultImg);
     }
-  }, [storeImages, product?.id]); // 🌟 Dùng product.id và storeImages thay vì dùng mảng galleryImages để tránh lặp vô hạn
+  }, [galleryImages, storeImages]);
 
-  const handleAddToCart = () => {
+  // 4. Xử lý thêm vào giỏ hàng
+  const handleAddToCart = async () => {
     if (!product) return;
 
     if (product.stockQuantity <= 0 || product.status === 'OUT_OF_STOCK') {
@@ -82,8 +86,13 @@ const ProductDetail = () => {
       return;
     }
 
-    for (let i = 0; i < quantity; i++) {
-      addItem(product);
+    // 🌟 CẬP NHẬT tối ưu: Thêm số lượng quantity được chọn thay vì loop gọi API đơn lẻ
+    try {
+      await addItem(product, quantity); 
+      // Nếu store của bạn chưa hỗ trợ tham số quantity trong addItem, bạn có thể giữ logic cũ 
+      // hoặc cập nhật hàm addItem(product, quantity) trong cartStore tùy ý backend.
+    } catch (error) {
+      console.error(error);
     }
   };
 
@@ -114,22 +123,27 @@ const ProductDetail = () => {
                 </div>
               ) : (
                 <img
-                  src={activeImage || 'https://placehold.co/500x500'}
+                  src={activeImage}
                   alt={product.name}
                   className="w-full h-full object-cover transition-all duration-300 transform hover:scale-105"
+                  onError={(e) => {
+                    if (e.target.src !== fallbackDefaultImg) {
+                      e.target.src = fallbackDefaultImg;
+                    }
+                  }}
                 />
               )}
             </div>
 
             {/* Thanh trượt danh sách ảnh phụ */}
             {!imagesLoading && galleryImages.length > 1 && (
-              <div className="flex gap-3 overflow-x-auto pb-2 pt-1 scrollbar-thin">
+              <div className="flex gap-3 overflow-x-auto pb-2 pt-1 scrollbar-thin scrollbar-thumb-gray-200">
                 {galleryImages.map((imgUrl, index) => (
                   <button
                     key={index}
                     type="button"
-                    onClick={() => setActiveImage(imgUrl)} // 🌟 Giờ đây nút bấm đã ăn trạng thái mượt mà không lo bị ghi đè
-                    className={`relative w-24 h-24 flex-shrink-0 bg-gray-50 rounded-2xl border-2 transition-all duration-200 overflow-hidden ${
+                    onClick={() => setActiveImage(imgUrl)}
+                    className={`relative w-24 h-24 flex-shrink-0 bg-gray-50 rounded-2xl border-2 transition-all duration-200 overflow-hidden cursor-pointer ${
                       activeImage === imgUrl
                         ? 'border-orange-500 shadow-md scale-[0.95]'
                         : 'border-transparent opacity-70 hover:opacity-100'
@@ -139,6 +153,7 @@ const ProductDetail = () => {
                       src={imgUrl}
                       alt={`${product.name} - ảnh ${index + 1}`}
                       className="w-full h-full object-cover"
+                      onError={(e) => { e.target.src = fallbackDefaultImg; }}
                     />
                   </button>
                 ))}
@@ -168,7 +183,7 @@ const ProductDetail = () => {
                   type="button"
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
                   disabled={isOutOfStock}
-                  className="px-4 py-3 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-3 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer bg-transparent border-none"
                 >
                   <Minus size={18} />
                 </button>
@@ -183,7 +198,7 @@ const ProductDetail = () => {
                     )
                   }
                   disabled={isOutOfStock}
-                  className="px-4 py-3 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-3 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer bg-transparent border-none"
                 >
                   <Plus size={18} />
                 </button>
@@ -209,7 +224,7 @@ const ProductDetail = () => {
               <span>
                 {isOutOfStock
                   ? 'Sản phẩm hiện đã hết hàng'
-                  : `Còn ${product.stockQuantity} sản phẩm trong kho`}
+                  : `Còn ${product.stockQuantity || 0} sản phẩm trong kho`}
               </span>
             </div>
           </div>
@@ -217,7 +232,7 @@ const ProductDetail = () => {
 
         {/* Khu vực đánh giá sản phẩm */}
         <div className="mt-12 pt-8 border-t border-gray-100">
-          <ReviewProduct reviews={reviews} loading={reviewLoading} />
+          <ReviewProduct reviews={reviews || []} loading={reviewLoading} />
         </div>
 
       </div>

@@ -11,7 +11,7 @@ const getProductImages = async (productId) => {
     URL_CONSTANT.ProductImages.GET_IMAGES.replace("{productId}", productId)
   );
 
-  const baseUrl = `${import.meta.env.VITE_API_URL}/uploads/products`;
+  const baseUrl = `${import.meta.env.VITE_API_URL}/upload/products`;
 
   const mapped = (resp.data?.data || []).map((img) => ({
     ...img,
