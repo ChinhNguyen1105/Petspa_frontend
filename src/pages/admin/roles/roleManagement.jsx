@@ -1,88 +1,105 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
+
 import { useRoleStore } from "../../../store/roleStore"; 
 import { usePermissionStore } from "../../../store/permissionStore";
-import { useCartStore } from "../../../store/cartStore"; // Sử dụng showToast đồng bộ hệ thống
+import { useCartStore } from "../../../store/cartStore"; 
 import { 
-  Shield, 
-  ShieldCheck, 
-  Save, 
-  CheckSquare, 
-  Square, 
-  RefreshCw, 
-  AlertCircle,
-  ChevronRight,
-  CheckCircle,
-  Layers,
-  Lock
+  Shield, ShieldCheck, Save, CheckSquare, Square, RefreshCw, 
+  AlertCircle, ChevronRight, CheckCircle, Layers, Lock
 } from "lucide-react";
 import Loading from "../../../components/common/Loading";
 import ConfirmModal from "../../../components/common/ConfirmModal";
+import Pagination from "../../../components/common/Pagination";
 
 const RoleManagement = () => {
-  // ── 1. ĐỒNG BỘ STORE VAI TRÒ (useRoleStore) ──
+  // ── 1. ĐỒNG BỘ STORE ──
   const roles = useRoleStore((state) => state.roles);
   const loadingRoles = useRoleStore((state) => state.loading);
   const errorRoles = useRoleStore((state) => state.error);
   const fetchRoles = useRoleStore((state) => state.fetchRoles);
   const updateRole = useRoleStore((state) => state.updateRole);
 
-  // ── 2. ĐỒNG BỘ STORE QUYỀN HẠN (usePermissionStore) ──
   const permissions = usePermissionStore((state) => state.permissions);
+  // Giả định store của bạn có lưu meta hoặc bạn có thể bổ sung. 
+  // Nếu store không giữ meta, hãy đảm bảo hàm fetchPermissions cập nhật dữ liệu permissions ứng với từng trang.
   const loadingPermissions = usePermissionStore((state) => state.loading);
   const errorPermissions = usePermissionStore((state) => state.error);
   const fetchPermissions = usePermissionStore((state) => state.fetchPermissions);
+  
+  // Tổng số lượng bản ghi thực tế từ API để truyền vào phân trang (ví dụ: 59)
+  // Bạn hãy thay thế bằng trường total thực tế trong Store của bạn (ví dụ: state.totalPermissions hoặc state.meta.total)
+  const totalPermissions = usePermissionStore((state) => state.total || state.meta?.total || 59); 
 
-  // Gộp trạng thái loading và error để giao diện hiển thị tập trung
   const isLoadingCombined = loadingRoles || loadingPermissions;
   const combinedError = errorRoles || errorPermissions;
+
+  const permissionContainerRef = useRef(null);
 
   // ── LOCAL UI STATE ──
   const [selectedRole, setSelectedRole] = useState(null);
   const [checkedPermissionIds, setCheckedPermissionIds] = useState([]);
   
-  // Trạng thái cho Modal Xác nhận
+  // State quản lý trang hiện tại gửi lên API
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20); // Khớp với kích thước trang Backend đang trả về (pageSize: 20)
+
   const [confirmModal, setConfirmModal] = useState({
-    isOpen: false,
-    type: "", 
-    title: "",
-    message: "",
-    pendingData: null
+    isOpen: false, type: "", title: "", message: "", pendingData: null
   });
 
   const showToast = useCartStore((state) => state.showToast);
 
-  // ── 3. NẠP DỮ LIỆU BAN ĐẦU ──
+  // ── 2. NẠP VAI TRÒ BAN ĐẦU (CHẠY 1 LẦN) ──
   useEffect(() => {
-    const initData = async () => {
-      // Gọi đồng thời cả 2 API lấy Roles và Toàn bộ Permissions hệ thống
-      await Promise.all([
-        fetchRoles({ pageSize: 100 }), 
-        fetchPermissions({ pageSize: 200 })
-      ]);
+    const initRoles = async () => {
+      const rolesRes = await fetchRoles({ pageSize: 100 });
+      if (rolesRes && rolesRes.length > 0) {
+        const firstRole = rolesRes[0];
+        setSelectedRole(firstRole);
+        setCheckedPermissionIds(firstRole.permissions ? firstRole.permissions.map(p => p.id) : []);
+      }
     };
-    initData();
-  }, [fetchRoles, fetchPermissions]);
+    initRoles();
+  }, [fetchRoles]);
 
-  // ── 4. MẶC ĐỊNH CHỌN VAI TRÒ ĐẦU TIÊN KHI TẢI XONG DỮ LIỆU ──
+  // ── 3. FETCH QUYỀN HẠN THEO TRANG (CHẠY MỖI KHI CURRENT_PAGE THAY ĐỔI) ──
   useEffect(() => {
-    if (roles.length > 0 && !selectedRole) {
-      handleSelectRole(roles[0]);
-    } else if (selectedRole) {
-      // Cập nhật lại thông tin đồng bộ nếu danh sách roles trong store thay đổi
+    fetchPermissions({ page: currentPage, pageSize: pageSize });
+    
+    // Cuộn mượt khung hiển thị lên đầu mỗi khi dữ liệu trang mới về
+    if (permissionContainerRef.current) {
+      permissionContainerRef.current.scrollTop = 0;
+    }
+  }, [currentPage, pageSize, fetchPermissions]);
+
+  // ── 4. ĐỒNG BỘ KHI ROLES TRÊN STORE THAY ĐỔI ĐỘT BIẾN (SAU KHI LƯU) ──
+  useEffect(() => {
+    if (selectedRole && roles.length > 0) {
       const updatedRole = roles.find(r => r.id === selectedRole.id);
-      if (updatedRole && JSON.stringify(updatedRole.permissionIds) !== JSON.stringify(selectedRole.permissionIds)) {
-        setSelectedRole(updatedRole);
+      if (updatedRole) {
+        const updatedIds = updatedRole.permissions ? updatedRole.permissions.map(p => p.id) : [];
+        const currentIds = selectedRole.permissions ? selectedRole.permissions.map(p => p.id) : [];
+        
+        if (JSON.stringify(updatedIds) !== JSON.stringify(currentIds)) {
+          setSelectedRole(updatedRole);
+          setCheckedPermissionIds(updatedIds);
+        }
       }
     }
-  }, [roles, selectedRole]);
+  }, [roles]);
 
-  // ── 5. LOGIC TỰ ĐỘNG NHÓM QUYỀN HẠN THEO MODULE ──
-  // Biến mảng phẳng phẳng từ backend thành Object phân nhóm real-time
+  const handleSelectRole = (role) => {
+    setSelectedRole(role);
+    const extractedIds = role.permissions ? role.permissions.map((p) => p.id) : [];
+    setCheckedPermissionIds(extractedIds);
+    setCurrentPage(1); 
+  };
+
+  // ── 5. NHÓM QUYỀN HẠN THEO MODULE (DỮ LIỆU ĐÃ ĐƯỢC API LỌC THEO TRANG) ──
   const permissionsByModule = useMemo(() => {
     if (!permissions || permissions.length === 0) return {};
     
     return permissions.reduce((acc, curr) => {
-      // Lấy tên Phân hệ từ trường module hoặc từ apiPath (ví dụ: "/api/v1/products" -> lấy "products")
       const moduleName = curr.module || curr.apiPath?.split("/")[3]?.toUpperCase() || "HỆ THỐNG CHUNG";
       if (!acc[moduleName]) {
         acc[moduleName] = [];
@@ -92,22 +109,15 @@ const RoleManagement = () => {
     }, {});
   }, [permissions]);
 
-  // Xử lý đổi Vai trò
-  const handleSelectRole = (role) => {
-    setSelectedRole(role);
-    setCheckedPermissionIds(role.permissionIds || []);
-  };
+  // Lấy toàn bộ danh sách các group module từ cục dữ liệu phân trang hiện tại của API
+  const moduleKeys = useMemo(() => Object.keys(permissionsByModule), [permissionsByModule]);
 
-  // Xử lý bật/tắt từng ô checkbox quyền đơn lẻ
   const handleTogglePermission = (permissionId) => {
     setCheckedPermissionIds((prev) =>
-      prev.includes(permissionId)
-        ? prev.filter((id) => id !== permissionId)
-        : [...prev, permissionId]
+      prev.includes(permissionId) ? prev.filter((id) => id !== permissionId) : [...prev, permissionId]
     );
   };
 
-  // Xử lý bật/tắt nhanh TẤT CẢ quyền lợi của một Phân hệ (Module)
   const handleToggleModuleAll = (modulePermissions) => {
     const moduleIds = modulePermissions.map((p) => p.id);
     const isAllSelected = moduleIds.every((id) => checkedPermissionIds.includes(id));
@@ -115,14 +125,10 @@ const RoleManagement = () => {
     if (isAllSelected) {
       setCheckedPermissionIds((prev) => prev.filter((id) => !moduleIds.includes(id)));
     } else {
-      setCheckedPermissionIds((prev) => {
-        const uniqueIds = new Set([...prev, ...moduleIds]);
-        return Array.from(uniqueIds);
-      });
+      setCheckedPermissionIds((prev) => Array.from(new Set([...prev, ...moduleIds])));
     }
   };
 
-  // Mở modal xác nhận cập nhật phân quyền
   const handleFormSubmit = (e) => {
     e.preventDefault();
     if (!selectedRole) return;
@@ -136,15 +142,15 @@ const RoleManagement = () => {
     });
   };
 
-  // ── 6. THỰC THI LƯU DỮ LIỆU QUA STORE MỚI ──
   const executeSavePermissions = async () => {
     try {
-      // Chuẩn bị payload chuẩn DTO để cập nhật thông tin vai trò kèm mảng ID quyền mới
+      const formattedPermissions = confirmModal.pendingData.map(id => ({ id }));
       const updatePayload = {
         id: selectedRole.id,
         name: selectedRole.name,
         description: selectedRole.description,
-        permissionIds: confirmModal.pendingData // Đẩy mảng phân quyền mới lên
+        activeFlag: selectedRole.activeFlag ?? true,
+        permissions: formattedPermissions 
       };
 
       const res = await updateRole(updatePayload);
@@ -152,7 +158,13 @@ const RoleManagement = () => {
       
       if (res && res.success) {
         showToast(`Cập nhật ma trận quyền vai trò [${selectedRole.name}] thành công!`, "success");
-        setSelectedRole((prev) => ({ ...prev, permissionIds: confirmModal.pendingData }));
+        
+        const updatedPermissionsMock = confirmModal.pendingData.map(id => {
+          const originalPerm = permissions.find(p => p.id === id);
+          return originalPerm ? originalPerm : { id };
+        });
+
+        setSelectedRole((prev) => ({ ...prev, permissions: updatedPermissionsMock }));
       } else {
         showToast(res.message || "Không thể cập nhật phân quyền.", "error");
       }
@@ -171,7 +183,6 @@ const RoleManagement = () => {
     setConfirmModal({ isOpen: false, type: "", title: "", message: "", pendingData: null });
   };
 
-  // Trạng thái Loading ban đầu khi chưa có dữ liệu vai trò nào
   if (isLoadingCombined && roles.length === 0) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
@@ -183,7 +194,7 @@ const RoleManagement = () => {
   return (
     <div className="p-6 space-y-6 bg-gray-50 min-h-screen">
       
-      {/* BREADCRUMB & TIÊU ĐỀ TRANG */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
@@ -198,7 +209,7 @@ const RoleManagement = () => {
         
         <button 
           type="button"
-          onClick={() => { fetchRoles(); fetchPermissions(); }}
+          onClick={() => { fetchRoles({ pageSize: 100 }); fetchPermissions({ page: currentPage, pageSize: pageSize }); }}
           className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 text-xs font-bold text-gray-600 rounded-xl hover:bg-gray-50 transition-all shadow-sm active:scale-95"
         >
           <RefreshCw size={14} className={`${isLoadingCombined ? 'animate-spin' : ''}`} /> 
@@ -206,7 +217,6 @@ const RoleManagement = () => {
         </button>
       </div>
 
-      {/* Thông báo lỗi tập trung từ cả 2 Store */}
       {combinedError && (
         <div className="p-3 bg-red-50 border border-red-100 text-red-500 rounded-xl text-xs font-bold flex items-center gap-2 max-w-7xl">
           <AlertCircle size={14} className="flex-shrink-0" />
@@ -214,10 +224,10 @@ const RoleManagement = () => {
         </div>
       )}
 
-      {/* THÂN CHÍNH */}
+      {/* BODY */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         
-        {/* CỘT TRÁI: DANH SÁCH VAI TRÒ */}
+        {/* CỘT VAI TRÒ */}
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 lg:sticky lg:top-6">
           <div className="flex items-center gap-2 text-base font-black text-slate-800 border-b border-gray-100 pb-3 mb-4 uppercase tracking-wide">
             <Shield size={18} className="text-orange-500" />
@@ -233,15 +243,11 @@ const RoleManagement = () => {
                   type="button"
                   onClick={() => handleSelectRole(role)}
                   className={`w-full flex items-center justify-between p-3.5 rounded-xl text-left border transition-all active:scale-[0.99] ${
-                    isSelected
-                      ? "bg-orange-50/40 border-orange-200/80 text-orange-600 shadow-sm"
-                      : "bg-gray-50/50 border-gray-100 text-gray-600 hover:bg-gray-50 hover:border-gray-200"
+                    isSelected ? "bg-orange-50/40 border-orange-200/80 text-orange-600 shadow-sm" : "bg-gray-50/50 border-gray-100 text-gray-600 hover:bg-gray-50"
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className={`p-2 rounded-lg shrink-0 border ${
-                      isSelected ? "bg-orange-500 border-orange-600 text-white" : "bg-white border-gray-200 text-gray-400"
-                    }`}>
+                    <div className={`p-2 rounded-lg shrink-0 border ${isSelected ? "bg-orange-500 border-orange-600 text-white" : "bg-white border-gray-200 text-gray-400"}`}>
                       <ShieldCheck size={16} />
                     </div>
                     <div className="min-w-0">
@@ -251,10 +257,8 @@ const RoleManagement = () => {
                       <p className="text-[11px] text-gray-400 truncate mt-0.5">{role.description || "Chưa có mô tả vai trò"}</p>
                     </div>
                   </div>
-                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${
-                    isSelected ? "bg-white border-orange-200 text-orange-600" : "bg-gray-100 border-transparent text-gray-500"
-                  }`}>
-                    {role.permissionIds?.length || 0} quyền
+                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${isSelected ? "bg-white border-orange-200 text-orange-600" : "bg-gray-100 border-transparent text-gray-500"}`}>
+                    {role.permissions?.length || 0} quyền
                   </span>
                 </button>
               );
@@ -262,10 +266,9 @@ const RoleManagement = () => {
           </div>
         </div>
 
-        {/* CỘT PHẢI: CHI TIẾT MA TRẬN PHÂN QUYỀN */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden lg:col-span-2 flex flex-col justify-between min-h-[500px]">
+        {/* CỘT DANH SÁCH QUYỀN */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden lg:col-span-2 flex flex-col justify-between min-h-[550px]">
           
-          {/* THANH ĐẦU KHUNG CHI TIẾT */}
           <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div className="text-sm font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
               <Lock size={16} className="text-orange-500" />
@@ -285,42 +288,32 @@ const RoleManagement = () => {
             )}
           </div>
 
-          {/* VÙNG HIỂN THỊ DANH SÁCH QUYỀN THEO MODULE */}
-          <div className="p-5 space-y-5 max-h-[calc(100vh-260px)] overflow-y-auto custom-scrollbar">
-            {Object.keys(permissionsByModule).length === 0 ? (
+          <div 
+            ref={permissionContainerRef}
+            className="p-5 space-y-5 max-h-[calc(100vh-320px)] overflow-y-auto custom-scrollbar flex-1 scroll-smooth"
+          >
+            {moduleKeys.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-gray-400 font-medium space-y-2">
                 <Layers size={32} className="text-gray-300" />
                 <span>Không tìm thấy tài nguyên quyền hạn nào từ hệ thống.</span>
               </div>
             ) : (
-              Object.keys(permissionsByModule).map((moduleName) => {
+              moduleKeys.map((moduleName) => {
                 const modulePermissions = permissionsByModule[moduleName];
-                
-                const isAllModuleChecked = modulePermissions.every((p) =>
-                  checkedPermissionIds.includes(p.id)
-                );
-                const isSomeModuleChecked = modulePermissions.some((p) =>
-                  checkedPermissionIds.includes(p.id)
-                ) && !isAllModuleChecked;
+                const isAllModuleChecked = modulePermissions.every((p) => checkedPermissionIds.includes(p.id));
+                const isSomeModuleChecked = modulePermissions.some((p) => checkedPermissionIds.includes(p.id)) && !isAllModuleChecked;
 
                 return (
                   <div key={moduleName} className="border border-gray-100 rounded-xl overflow-hidden shadow-xs bg-white">
-                    
-                    {/* TIÊU ĐỀ PHÂN HỆ */}
                     <div className="bg-gray-50/60 px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
                       <span className="text-xs font-black text-slate-700 tracking-wide uppercase">
                         📦 PHÂN HỆ: {moduleName}
                       </span>
-                      
                       <button
                         type="button"
                         onClick={() => handleToggleModuleAll(modulePermissions)}
                         className={`flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-extrabold transition-colors ${
-                          isAllModuleChecked
-                            ? "text-purple-600 bg-purple-50 border-purple-100"
-                            : isSomeModuleChecked
-                            ? "text-teal-600 bg-teal-50 border-teal-100"
-                            : "text-gray-400 bg-white border-gray-200 hover:bg-gray-50"
+                          isAllModuleChecked ? "text-purple-600 bg-purple-50 border-purple-100" : isSomeModuleChecked ? "text-teal-600 bg-teal-50 border-teal-100" : "text-gray-400 bg-white border-gray-200"
                         }`}
                       >
                         {isAllModuleChecked ? <CheckSquare size={12} /> : <Square size={12} />}
@@ -328,29 +321,22 @@ const RoleManagement = () => {
                       </button>
                     </div>
 
-                    {/* LƯỚI Ô QUYỀN LỢI CHI TIẾT */}
                     <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 bg-white">
                       {modulePermissions.map((permission) => {
                         const isChecked = checkedPermissionIds.includes(permission.id);
-                        
                         return (
                           <div
                             key={permission.id}
                             onClick={() => handleTogglePermission(permission.id)}
                             className={`flex items-start gap-3 p-3 rounded-xl border transition-all duration-150 cursor-pointer select-none group ${
-                              isChecked
-                                ? "bg-orange-50/20 border-orange-200/60 shadow-xs"
-                                : "bg-white border-gray-100 hover:border-gray-200 hover:bg-gray-50/50"
+                              isChecked ? "bg-orange-50/20 border-orange-200/60 shadow-xs" : "bg-white border-gray-100 hover:bg-gray-50/50"
                             }`}
                           >
-                            <div className={`mt-0.5 rounded shrink-0 transition-colors ${
-                              isChecked ? "text-orange-500" : "text-gray-300 group-hover:text-gray-400"
-                            }`}>
+                            <div className={`mt-0.5 rounded shrink-0 transition-colors ${isChecked ? "text-orange-500" : "text-gray-300"}`}>
                               {isChecked ? <CheckSquare size={15} /> : <Square size={15} />}
                             </div>
-
                             <div className="min-w-0">
-                              <p className={`text-xs font-bold leading-tight transition-colors ${isChecked ? "text-slate-800" : "text-gray-600"}`}>
+                              <p className={`text-xs font-bold leading-tight ${isChecked ? "text-slate-800" : "text-gray-600"}`}>
                                 {permission.name}
                               </p>
                               <div className="flex items-center gap-1.5 mt-1.5">
@@ -361,7 +347,7 @@ const RoleManagement = () => {
                                 }`}>
                                   {permission.method}
                                 </span>
-                                <span className="text-[10px] text-gray-400 font-bold font-mono truncate" title={permission.apiPath}>
+                                <span className="text-[10px] text-gray-400 font-bold font-mono truncate">
                                   {permission.apiPath}
                                 </span>
                               </div>
@@ -370,34 +356,36 @@ const RoleManagement = () => {
                         );
                       })}
                     </div>
-
                   </div>
                 );
               })
             )}
           </div>
 
-          {/* CHÂN KHUNG THÔNG TIN TRẠNG THÁI TỔNG HỢP */}
-          <div className="bg-gray-50/50 px-4 py-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-gray-400">
+          {/* FOOTER BAR: TRUYỀN ĐÚNG TRƯỜNG TOTAL TỪ API */}
+          <div className="bg-gray-50/50 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between p-4 gap-4 text-xs font-bold text-gray-400">
             <div>
               Đã chọn: <span className="text-slate-700">{checkedPermissionIds.length}</span> quyền hạn cho vai trò này.
             </div>
-            <div className="text-[10px] text-gray-400 uppercase tracking-wider hidden sm:block">
-              Hệ thống Bảo mật cấu hình nâng cao
-            </div>
+            
+            {totalPermissions > 0 && (
+              <div className="scale-90 origin-right">
+                <Pagination
+                  currentPage={currentPage}
+                  totalItems={totalPermissions} // Sử dụng số lượng 59 bản ghi của API thay vì moduleKeys.length khách hàng
+                  pageSize={pageSize}
+                  onPageChange={(page) => setCurrentPage(page)}
+                />
+              </div>
+            )}
           </div>
 
         </div>
       </div>
 
-      {/* MODAL XÁC NHẬN CHUNG ĐỒNG BỘ HỆ THỐNG */}
       <ConfirmModal
-        isOpen={confirmModal.isOpen}
-        onClose={closeConfirmModal}
-        onConfirm={handleConfirmAction}
-        title={confirmModal.title}
-        message={confirmModal.message}
-        type="warning" 
+        isOpen={confirmModal.isOpen} onClose={closeConfirmModal} onConfirm={handleConfirmAction}
+        title={confirmModal.title} message={confirmModal.message} type="warning" 
       />
     </div>
   );

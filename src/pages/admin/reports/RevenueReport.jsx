@@ -26,6 +26,7 @@ import { useBookingStore } from '../../../store/bookingStore';
 const getPaymentStatusBadge = (status) => {
   const config = {
     PAID: { bg: 'bg-emerald-50 text-emerald-600 border-emerald-200', icon: <CheckCircle size={13} />, text: 'Đã thanh toán' },
+    PENDING: { bg: 'bg-orange-50 text-pet-orange border-orange-200', icon: <Clock size={13} />, text: 'Chờ thanh toán' },
     UNPAID: { bg: 'bg-orange-50 text-pet-orange border-orange-200', icon: <Clock size={13} />, text: 'Chưa thanh toán' },
     REFUNDED: { bg: 'bg-purple-50 text-purple-600 border-purple-200', icon: <AlertCircle size={13} />, text: 'Đã hoàn tiền' },
   };
@@ -60,7 +61,7 @@ const RevenueReport = () => {
   const [localError, setLocalError] = useState(null);
 
   // Bộ lọc dữ liệu báo cáo
-  const [paymentFilter, setPaymentFilter] = useState('ALL'); // ALL, PAID, UNPAID
+  const [paymentFilter, setPaymentFilter] = useState('ALL'); // ALL, PAID, PENDING, UNPAID
   const [sourceFilter, setSourceFilter] = useState('ALL'); // ALL, SPA, SHOP
 
   // ── STATE PHÂN TRANG (PAGINATION) ──
@@ -103,17 +104,20 @@ const RevenueReport = () => {
 
   // Hàm xử lý nghiệp vụ tính toán báo cáo chuyên sâu và chuẩn hóa trường dữ liệu
   const calculateMetrics = (orders = [], bookings = [], paymentStatus, source) => {
-    // 1. Chuẩn hóa mảng Đơn hàng (SHOP)
+    // 1. Chuẩn hóa mảng Đơn hàng (SHOP) dựa chính xác trên log API thực tế
     const normalizedOrders = orders.map(o => {
-      const statusMap = o.paymentStatus === 'SUCCESS' ? 'PAID' : 'UNPAID';
+      // Ánh xạ trạng thái linh hoạt theo dữ liệu backend trả về
+      let statusMap = o.paymentStatus;
+      if (o.paymentStatus === 'SUCCESS') statusMap = 'PAID';
+      
       return {
         id: `SHOP_${o.id}`,
         code: `ORD#${o.id}`,
-        customerName: o.userName || 'Khách vãng lai',
+        customerName: o.shippingName || o.userName || '—', // Ưu tiên shippingName từ API thực tế
         sourceType: 'SHOP',
         sourceLabel: 'Sản phẩm',
         amount: o.totalAmount || 0,
-        paymentStatus: statusMap,
+        paymentStatus: statusMap || 'PENDING',
         date: o.createdDate || '—'
       };
     });
@@ -124,7 +128,7 @@ const RevenueReport = () => {
       return {
         id: `SPA_${b.id}`,
         code: `BK#${b.id}`,
-        customerName: b.userName || 'Khách đặt Spa',
+        customerName: b.userName || '—',
         sourceType: 'SPA',
         sourceLabel: 'Dịch vụ Spa',
         amount: b.actualPrice || 0,
@@ -160,7 +164,7 @@ const RevenueReport = () => {
     const totalPaidCount = normalizedOrders.filter(o => o.paymentStatus === 'PAID').length + 
                            normalizedBookings.filter(b => b.paymentStatus === 'PAID').length;
                            
-    const totalUnpaidCount = normalizedOrders.filter(o => o.paymentStatus === 'UNPAID').length + 
+    const totalUnpaidCount = normalizedOrders.filter(o => o.paymentStatus === 'PENDING' || o.paymentStatus === 'UNPAID').length + 
                              normalizedBookings.filter(b => b.paymentStatus === 'UNPAID').length;
 
     setReportStats({
@@ -263,6 +267,7 @@ const RevenueReport = () => {
           >
             <option value="ALL">Tất cả trạng thái tiền</option>
             <option value="PAID">Giao dịch đã thanh toán</option>
+            <option value="PENDING">Giao dịch chờ thanh toán</option>
             <option value="UNPAID">Giao dịch chưa thanh toán</option>
           </select>
         </div>
@@ -329,7 +334,7 @@ const RevenueReport = () => {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-2xl font-black text-gray-800">{reportStats.unpaidCount}</div>
-              <div className="text-xs text-gray-400 font-medium">Hóa đơn chưa thanh toán</div>
+              <div className="text-xs text-gray-400 font-medium">Hóa đơn chưa/chờ thanh toán</div>
             </div>
             <div className="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center text-pet-orange">
               <Clock size={22} />
@@ -446,7 +451,7 @@ const RevenueReport = () => {
             <div className="text-xs font-bold text-gray-400">
               Hiển thị từ <span className="text-gray-700">{indexOfFirstItem + 1}</span> đến{' '}
               <span className="text-gray-700">{Math.min(indexOfLastItem, combinedTransactions.length)}</span> trong tổng số{' '}
-              <span className="text-pet-blue">{combinedTransactions.length}</span> bản ghi bản tin
+              <span className="text-pet-blue">{combinedTransactions.length}</span> bản ghi
             </div>
 
             <div className="flex items-center gap-1.5">

@@ -89,16 +89,15 @@ const getMyOrders = async (
   options = {}
 ) => {
   console.log("payload :", { status, sort });
+
   if (shouldUseApi(options)) {
     const res = await api({
   method: "GET",
   url: URL_CONSTANT.Order.GET_MY_ORDERS,
-  params: {
+      params: {
+    status,
     page,
     size,
-  },
-  data: {
-    status,
   },
 });
 

@@ -25,7 +25,9 @@ const UserManagement = () => {
   const { 
     users, 
     meta,
-    loading, 
+    loading,
+    detailLoading, // Thêm trạng thái loading chi tiết
+    currentUser,   // Thêm data user chi tiết từ store
     keyword,
     selectedRole,
     page,
@@ -33,11 +35,15 @@ const UserManagement = () => {
     setKeyword,
     setSelectedRole,
     setPage,
+    
     fetchUsers, 
+    fetchUserById, // Thêm hàm lấy chi tiết user
+    clearCurrentUser, // Hàm clear dữ liệu cũ khi đóng modal
     createUser, 
-    updateUser, 
+    updateUser,
+    
     deleteUser,
-    uploadAvatar // Đảm bảo hàm uploadAvatar đã được lấy từ Store
+    uploadAvatar,
   } = useUserStore();
 
   const showToast = useCartStore((state) => state.showToast);
@@ -45,7 +51,6 @@ const UserManagement = () => {
   const [searchInputValue, setSearchInputValue] = useState(keyword);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState('CREATE'); 
-  const [selectedUser, setSelectedUser] = useState(null);
 
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
@@ -77,15 +82,25 @@ const UserManagement = () => {
   }, [keyword]);
 
   const handleOpenCreateModal = () => {
+    clearCurrentUser(); // Xóa data chi tiết cũ nếu có
     setModalType('CREATE');
-    setSelectedUser(null);
     setIsModalOpen(true);
   };
 
-  const handleOpenEditModal = (user) => {
+  // Cập nhật xử lý gọi API lấy chi tiết khi click nút Sửa
+  const handleOpenEditModal = async (user) => {
     setModalType('EDIT');
-    setSelectedUser(user);
-    setIsModalOpen(true);
+    setIsModalOpen(true); // Mở modal trước để hiển thị trạng thái loading bên trong nếu cần
+    try {
+      const response = await fetchUserById(user.id);
+      console.log("respones in manager: ", response);
+      if (response?.status !== 'SUCCESS') {
+        showToast(response?.message || 'Không thể lấy thông tin chi tiết người dùng.', 'error');
+      }
+    } catch (err) {
+      console.error("Lỗi lấy chi tiết thành viên:", err);
+      showToast('Đã xảy ra lỗi hệ thống khi tải thông tin chi tiết.', 'error');
+    }
   };
 
   const handleFormSubmit = (payloadData) => {
@@ -105,14 +120,12 @@ const UserManagement = () => {
   const executeSaveUser = async (payloadData) => {
     try {
       if (modalType === 'CREATE') {
-        // Tách tệp tin gốc đính kèm ra khỏi JSON trước khi gửi API tạo user
         const { rawFile, ...userCreateData } = payloadData;
         
         const response = await createUser(userCreateData);
         if (response?.status === 'SUCCESS') {
           const createdUser = response.data;
           
-          // Nếu có tệp tin ảnh đính kèm, thực hiện upload đồng bộ dựa trên ID mới tạo
           if (rawFile && createdUser?.id) {
             const uploadRes = await uploadAvatar(createdUser.id, rawFile);
             if (uploadRes?.status !== 'SUCCESS') {
@@ -129,7 +142,6 @@ const UserManagement = () => {
           showToast(response?.message || 'Đã xảy ra lỗi khi tạo.', 'error');
         }
       } else {
-        // Đối với EDIT, payloadData lúc này đã chứa URL ảnh hoàn chỉnh từ form tải lên trực tiếp trước đó
         const response = await updateUser(payloadData);
         if (response?.status === 'SUCCESS') {
           showToast('Cập nhật thông tin thành viên thành công!', 'success');
@@ -187,6 +199,7 @@ const UserManagement = () => {
     switch (confirmModal.type) {
       case 'CANCEL_FORM':
         setIsModalOpen(false); 
+        clearCurrentUser(); // Giải phóng dữ liệu chi tiết
         closeConfirmModal();
         break;
       case 'CONFIRM_UPDATE':
@@ -286,8 +299,8 @@ const UserManagement = () => {
                     <tr key={user.id} className="hover:bg-gray-50/50 transition-colors group">
                       <td className="p-4 text-center">
                         <div className="w-11 h-11 bg-gray-100 rounded-full overflow-hidden border border-gray-200 flex items-center justify-center mx-auto shadow-inner">
-                          {user.avatar ? (
-                            <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                          {user.avatarUrl || user.avatar ? (
+                            <img src={user.avatarUrl || user.avatar} alt={user.name} className="w-full h-full object-cover" />
                           ) : (
                             <User size={18} className="text-gray-400" />
                           )}
@@ -338,14 +351,18 @@ const UserManagement = () => {
         </div>
       )}
 
-      {/* Modal chính chứa Form */}
+      {/* Modal chứa Form */}
       <Modal isOpen={isModalOpen} onClose={handleCancelForm} title={modalType === 'CREATE' ? 'Thêm tài khoản người dùng' : 'Chỉnh sửa tài khoản'} size='lg'>
-        <UserFormAdmin
-          initialData={selectedUser}
-          onSubmit={handleFormSubmit}
-          onClose={handleCancelForm} 
-          onUploadAvatar={uploadAvatar} // Truyền hàm upload từ store vào form admin để xử lý sửa ảnh
-        />
+        {detailLoading ? (
+          <div className="flex h-64 items-center justify-center"><Loading size="medium" /></div>
+        ) : (
+          <UserFormAdmin
+            initialData={currentUser} // Truyền dữ liệu chi tiết (bao gồm avatarUrl đầy đủ) từ Store vào
+            onSubmit={handleFormSubmit}
+            onClose={handleCancelForm} 
+            onUploadAvatar={uploadAvatar} 
+          />
+        )}
       </Modal>
 
       <ConfirmModal isOpen={confirmModal.isOpen} onClose={closeConfirmModal} onConfirm={handleConfirmAction} title={confirmModal.title} message={confirmModal.message} type={confirmModal.type === 'CONFIRM_DELETE' ? 'danger' : 'warning'} />

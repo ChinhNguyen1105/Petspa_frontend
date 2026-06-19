@@ -1,21 +1,59 @@
 import api from "./api";
 import { URL_CONSTANT } from "../constants/urlConstant";
 
+// const getUsers = async (params = {}) => {
+//   const response = await api.get(
+//     URL_CONSTANT.User.GET_USERS,
+//     { params }
+//   );
+
+//   return response.data;
+// };
+
 const getUsers = async (params = {}) => {
   const response = await api.get(
     URL_CONSTANT.User.GET_USERS,
     { params }
   );
 
-  return response.data;
+  const baseUrl = `${import.meta.env.VITE_API_URL}/upload/avatars`;
+
+  const users = (response.data?.data?.result || []).map(user => ({
+    ...user,
+    avatarUrl: user?.avatarUrl
+      ? `${baseUrl}/${user.avatarUrl}`
+      : "",
+  }));
+
+  return {
+    ...response.data,
+    data: {
+      ...response.data.data,
+      result: users,
+    },
+  };
 };
 
 const getUserById = async (id) => {
   const response = await api.get(
-    URL_CONSTANT.User.GET_USER.replace(":id", id)
+    URL_CONSTANT.User.GET_USER.replace("{id}", id)
   );
 
-  return response.data;
+  const data = response.data?.data;
+
+  const mappedData = {
+    ...data,
+    avatarUrl: data?.avatarUrl
+      ? `${import.meta.env.VITE_API_URL}/upload/avatars/${data.avatarUrl}`
+      : "",
+  };
+
+  console.log("mapped response:", mappedData);
+
+  return {
+    ...response.data,
+    data: mappedData,
+  };
 };
 
 const createUser = async (userData) => {
@@ -97,6 +135,7 @@ const getProfile = async () => {
     URL_CONSTANT.User.GET_PROFILE
   );
 
+console.log("get profile", response);
   return response.data;
 };
 

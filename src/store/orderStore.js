@@ -29,7 +29,7 @@ export const useOrderStore = create((set, get) => ({
         meta: res?.data?.meta || null,
         loading: false,
       });
-
+      console.log("fetch order: ", res);
       return res;
     } catch (err) {
       set({

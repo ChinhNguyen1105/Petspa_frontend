@@ -50,6 +50,7 @@ import RevenueReport from "./pages/admin/reports/RevenueReport";
 import RoleManagement from "./pages/admin/roles/roleManagement";
 import InventoryListManagement from "./pages/admin/inventory/inventoryListManagement";
 import InventoryTransManagement from "./pages/admin/inventory/inventoryTransManagement";
+import PermissionManagement from "./pages/admin/roles/permissionManagement";
 
 // ----------------------------------------------------------------------
 // ROUTE GUARDS
@@ -263,6 +264,7 @@ function App() {
             <Route path="/admin/roles" element={<RoleManagement />} />
             <Route path="/admin/inventory/list" element={<InventoryListManagement />} />
             <Route path="/admin/inventory/transaction" element={<InventoryTransManagement />} />
+            <Route path="/admin/permission" element={<PermissionManagement />} />
           </Route>
 
           {/* ========================================================= */}

@@ -71,6 +71,7 @@ export const useUserStore = create((set, get) => ({
 
   // ───────────────────────── GET USER DETAIL ─────────────────────────
   fetchUserById: async (id) => {
+    console.log("userid: ", id);
     try {
       set({
         detailLoading: true,

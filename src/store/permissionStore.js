@@ -46,7 +46,7 @@ export const usePermissionStore =
           await PermissionService.getPermissions(
             params
           );
-
+        console.log("fetch permission: ", res);
         set({
           permissions:
             res?.result || [],

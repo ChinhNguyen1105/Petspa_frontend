@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Sparkles, ShoppingBag, Loader2 } from 'lucide-react';
 import ProductCard from '../../components/ui/ProductCard';
+
 import { useProductStore } from '../../store/productStore';
 import { useOrderStore } from '../../store/orderStore';
+
 import useRecommendationStore from '../../store/apioriStore';
 
 const RecommendedProducts = ({ maxItems = 4 }) => {

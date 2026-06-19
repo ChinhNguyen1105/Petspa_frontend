@@ -340,9 +340,7 @@ const Checkout = () => {
       </div>
 
       {/* COMPONENT RECOMMENDATION APRIORI */}
-      <div className="mt-12">
-        <RecommendedProducts maxItems={4} />
-      </div>
+
 
       {/* --- OVERLAY / MODAL CHỌN ĐỊA CHỈ & FORM THÊM MỚI / SỬA --- */}
       {showAddressOverlay && (
