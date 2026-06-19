@@ -1,7 +1,6 @@
 export const STATUS_FILTERS = [
     { value: 'ALL', label: 'Tất cả trạng thái', color: 'bg-gray-100 text-gray-600' },
     { value: 'PENDING', label: 'Chờ xử lý', color: 'bg-amber-50 text-amber-600 border border-amber-200' },
-    { value: 'CONFIRMED', label: 'Đã xác nhận', color: 'bg-blue-50 text-blue-600 border border-blue-200' },
     { value: 'SHIPPED', label: 'Đang giao hàng', color: 'bg-purple-50 text-purple-600 border border-purple-200' },
     { value: 'DELIVERED', label: 'Đã hoàn thành', color: 'bg-emerald-50 text-emerald-600 border border-emerald-200' },
     { value: 'CANCELLED', label: 'Đã hủy', color: 'bg-rose-50 text-rose-600 border border-rose-200' }
@@ -13,11 +12,11 @@ export const STATUS_CONFIG = {
     className: "bg-amber-50 text-amber-600 border-amber-100", 
     iconName: "Clock" 
   },
-  CONFIRMED: { 
-    text: "Đã xác nhận", 
-    className: "bg-blue-50 text-blue-600 border-blue-100", 
-    iconName: "CheckCircle" 
-  },
+  // CONFIRMED: { 
+  //   text: "Đã xác nhận", 
+  //   className: "bg-blue-50 text-blue-600 border-blue-100", 
+  //   iconName: "CheckCircle" 
+  // },
   SHIPPED: { 
     text: "Đang giao hàng", 
     className: "bg-indigo-50 text-indigo-600 border-indigo-100", 

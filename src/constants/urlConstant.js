@@ -46,6 +46,10 @@ export const URL_CONSTANT = {
     UPDATE_USER: '/users',
     DELETE_USER: '/users/{id}',
     CHANGE_USER_STATUS: '/users/{id}/status',
+
+    ADD_AVATAR: "users/{id}/avatar",
+    UPDATE_PROFILE: "users/update-profile",
+    GET_PROFILE: "users/profile",
   },
 
   Product: {

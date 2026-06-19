@@ -46,7 +46,7 @@ const getCart = async (options = {}) => {
 */
 const addToCart = async (
   productId,
-  quantity = 1,
+  quantity,
   options = {}
 ) => {
   if (shouldUseApi(options)) {

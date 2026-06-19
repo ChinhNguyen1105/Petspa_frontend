@@ -45,7 +45,7 @@ const ProductCard = ({ product }) => {
 
   const handleBuyNow = (e) => {
     e.preventDefault();
-    addItem(product);
+    addItem(product,1);
     navigate('/shop/checkout');
   };
 
@@ -103,7 +103,7 @@ const ProductCard = ({ product }) => {
       {/* Khu vực nút bấm */}
       <div className="flex items-center gap-2 w-full mt-2">
         <Button 
-          onClick={() => addItem(product)} 
+          onClick={() => addItem(product,1)} 
           variant="outline" 
           className="p-3 border border-slate-200 text-slate-600 hover:text-pet-blue hover:border-pet-blue/30 hover:bg-pet-blue/5 rounded-2xl transition-all active:scale-[0.95]"
           title="Thêm vào giỏ hàng"

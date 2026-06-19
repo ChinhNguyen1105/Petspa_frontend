@@ -20,7 +20,6 @@ const OrderList = () => {
     const params = {
       page: 0,
       size: 20,
-      // Nếu không phải tab 'ALL', truyền giá trị status (ví dụ: 'PROCESSING', 'CANCELLED') vào tham số body
       ...(activeTab !== 'ALL' ? { status: activeTab } : {})
     };
 

@@ -7,8 +7,7 @@ import {
   User, 
   Shield, 
   ChevronRight,
-  Mail,
-  Phone
+  Mail
 } from 'lucide-react';
 import Loading from '../../../components/common/Loading';
 import { formatDate } from '../../../utils/formatDate';
@@ -37,11 +36,13 @@ const UserManagement = () => {
     fetchUsers, 
     createUser, 
     updateUser, 
-    deleteUser 
+    deleteUser,
+    uploadAvatar // Đảm bảo hàm uploadAvatar đã được lấy từ Store
   } = useUserStore();
 
   const showToast = useCartStore((state) => state.showToast);
 
+  const [searchInputValue, setSearchInputValue] = useState(keyword);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState('CREATE'); 
   const [selectedUser, setSelectedUser] = useState(null);
@@ -57,8 +58,23 @@ const UserManagement = () => {
   const roles = ROLE_OPTIONS;
 
   useEffect(() => {
+    const handler = setTimeout(() => {
+      setKeyword(searchInputValue);
+      setPage(1); 
+    }, 500); 
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [searchInputValue, setKeyword, setPage]);
+
+  useEffect(() => {
     fetchUsers();
   }, [fetchUsers, keyword, selectedRole, page]);
+
+  useEffect(() => {
+    setSearchInputValue(keyword);
+  }, [keyword]);
 
   const handleOpenCreateModal = () => {
     setModalType('CREATE');
@@ -72,26 +88,38 @@ const UserManagement = () => {
     setIsModalOpen(true);
   };
 
-  const handleFormSubmit = (formData) => {
+  const handleFormSubmit = (payloadData) => {
     if (modalType === 'EDIT') {
       setConfirmModal({
         isOpen: true,
         type: 'CONFIRM_UPDATE',
         title: 'Xác nhận cập nhật',
-        message: `Bạn có chắc chắn muốn lưu các thay đổi cho tài khoản "${formData.name}"?`,
-        pendingData: formData
+        message: `Bạn có chắc chắn muốn lưu các thay đổi cho tài khoản "${payloadData.name}"?`,
+        pendingData: payloadData 
       });
     } else {
-      executeSaveUser(formData);
+      executeSaveUser(payloadData);
     }
   };
 
-  // Đồng bộ cấu trúc kiểm tra điều kiện response theo Backend (status === "SUCCESS")
-  const executeSaveUser = async (formData) => {
+  const executeSaveUser = async (payloadData) => {
     try {
       if (modalType === 'CREATE') {
-        const response = await createUser(formData);
+        // Tách tệp tin gốc đính kèm ra khỏi JSON trước khi gửi API tạo user
+        const { rawFile, ...userCreateData } = payloadData;
+        
+        const response = await createUser(userCreateData);
         if (response?.status === 'SUCCESS') {
+          const createdUser = response.data;
+          
+          // Nếu có tệp tin ảnh đính kèm, thực hiện upload đồng bộ dựa trên ID mới tạo
+          if (rawFile && createdUser?.id) {
+            const uploadRes = await uploadAvatar(createdUser.id, rawFile);
+            if (uploadRes?.status !== 'SUCCESS') {
+              showToast('Tài khoản đã tạo nhưng tải ảnh đại diện thất bại.', 'warning');
+            }
+          }
+
           showToast('Thêm thành viên mới thành công!', 'success');
           setIsModalOpen(false); 
           closeConfirmModal();
@@ -101,7 +129,8 @@ const UserManagement = () => {
           showToast(response?.message || 'Đã xảy ra lỗi khi tạo.', 'error');
         }
       } else {
-        const response = await updateUser(selectedUser.id, formData);
+        // Đối với EDIT, payloadData lúc này đã chứa URL ảnh hoàn chỉnh từ form tải lên trực tiếp trước đó
+        const response = await updateUser(payloadData);
         if (response?.status === 'SUCCESS') {
           showToast('Cập nhật thông tin thành viên thành công!', 'success');
           setIsModalOpen(false); 
@@ -122,7 +151,7 @@ const UserManagement = () => {
       isOpen: true,
       type: 'CANCEL_FORM',
       title: 'Hủy bỏ thao tác?',
-      message: 'Những thông tin bạn vừa nhập sẽ biến mất. Bạn vẫn muốn thoát chứ?',
+      message: 'Những thông tin bạn vừa nhập hoặc chỉnh sửa sẽ không được lưu. Bạn vẫn muốn thoát chứ?',
       pendingData: null
     });
   };
@@ -137,7 +166,6 @@ const UserManagement = () => {
     });
   };
 
-  // Đồng bộ cấu trúc kiểm tra điều kiện response theo Backend tại hàm Xóa
   const executeDeleteUser = async () => {
     const { id, name } = confirmModal.pendingData;
     try {
@@ -178,24 +206,12 @@ const UserManagement = () => {
 
   const renderStatusBadge = (user) => {
     if (user.deleteFlag) {
-      return (
-        <span className="inline-block text-xs font-bold px-2.5 py-1 rounded-full border text-red-600 bg-red-50 border-red-100">
-          Đã xóa
-        </span>
-      );
+      return <span className="inline-block text-xs font-bold px-2.5 py-1 rounded-full border text-red-600 bg-red-50 border-red-100">Đã xóa</span>;
     }
     if (user.activeFlag) {
-      return (
-        <span className="inline-block text-xs font-bold px-2.5 py-1 rounded-full border text-green-600 bg-green-50 border-green-100">
-          Hoạt động
-        </span>
-      );
+      return <span className="inline-block text-xs font-bold px-2.5 py-1 rounded-full border text-green-600 bg-green-50 border-green-100">Hoạt động</span>;
     }
-    return (
-      <span className="inline-block text-xs font-bold px-2.5 py-1 rounded-full border text-amber-600 bg-amber-50 border-amber-100">
-        Tạm ngưng
-      </span>
-    );
+    return <span className="inline-block text-xs font-bold px-2.5 py-1 rounded-full border text-amber-600 bg-amber-50 border-amber-100">Tạm ngưng</span>;
   };
 
   const totalPages = meta?.total ? Math.ceil(meta.total / pageSize) : 1;
@@ -222,14 +238,17 @@ const UserManagement = () => {
           <input 
             type="text" 
             placeholder="Tìm theo tên, email, số điện thoại..." 
-            value={keyword} 
-            onChange={(e) => setKeyword(e.target.value)} 
+            value={searchInputValue} 
+            onChange={(e) => setSearchInputValue(e.target.value)} 
             className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 text-gray-700" 
           />
         </div>
         <select 
           value={selectedRole || 'ALL'} 
-          onChange={(e) => setSelectedRole(e.target.value === 'ALL' ? '' : e.target.value)} 
+          onChange={(e) => {
+            setSelectedRole(e.target.value === 'ALL' ? '' : e.target.value);
+            setPage(1); 
+          }} 
           className="w-full sm:w-52 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 focus:outline-none focus:border-orange-500"
         >
           {roles.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
@@ -266,7 +285,7 @@ const UserManagement = () => {
                   users.map((user) => (
                     <tr key={user.id} className="hover:bg-gray-50/50 transition-colors group">
                       <td className="p-4 text-center">
-                        <div className="w-11 h-11 bg-gray-100 rounded-full overflow-hidden border border-gray-200 flex items-center justify-center mx-auto">
+                        <div className="w-11 h-11 bg-gray-100 rounded-full overflow-hidden border border-gray-200 flex items-center justify-center mx-auto shadow-inner">
                           {user.avatar ? (
                             <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
                           ) : (
@@ -274,55 +293,32 @@ const UserManagement = () => {
                           )}
                         </div>
                       </td>
-
                       <td className="p-4">
                         <div className="font-bold text-gray-800 text-base">{user.name}</div>
                         <div className="text-xs font-mono text-gray-400">ID: #{user.id}</div>
                       </td>
-
-                      <td className="p-4 space-y-0.5">
+                      <td className="p-4">
                         <div className="flex items-center gap-1.5 text-gray-700 font-medium">
                           <Mail size={13} className="text-gray-400" />
                           <span>{user.email || '—'}</span>
                         </div>
-                        <div className="flex items-center gap-1.5 text-gray-400 text-xs">
-                          <Phone size={13} />
-                          <span>{user.phone || '—'}</span>
-                        </div>
                       </td>
-
                       <td className="p-4">
                         <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
                           <Shield size={12} className="text-slate-500" />
                           {user.roleName === 'ADMIN' ? 'Quản trị viên' : user.roleName === 'STAFF' ? 'Nhân viên' : user.roleName === 'MANAGER' ? 'Quản lý' : 'Khách hàng'}
                         </span>
                       </td>
-
-                      <td className="p-4 text-center">
-                        {renderStatusBadge(user)}
-                      </td>
-
+                      <td className="p-4 text-center">{renderStatusBadge(user)}</td>
                       <td className="p-4 text-center text-gray-500 font-medium">
                         {user.createdDate ? formatDate(user.createdDate) : '—'}
                       </td>
-
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button 
-                            onClick={() => handleOpenEditModal(user)} 
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl border border-transparent hover:border-blue-200 transition-all"
-                          >
+                          <button onClick={() => handleOpenEditModal(user)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl border border-transparent hover:border-blue-200 transition-all">
                             <Edit2 size={16} />
                           </button>
-                          <button 
-                            onClick={() => handleConfirmDelete(user.id, user.name)} 
-                            disabled={user.deleteFlag}
-                            className={`p-2 rounded-xl border border-transparent transition-all ${
-                              user.deleteFlag 
-                                ? 'text-gray-300 cursor-not-allowed' 
-                                : 'text-red-500 hover:bg-red-50 hover:border-red-200'
-                            }`}
-                          >
+                          <button onClick={() => handleConfirmDelete(user.id, user.name)} disabled={user.deleteFlag} className={`p-2 rounded-xl border border-transparent transition-all ${user.deleteFlag ? 'text-gray-300 cursor-not-allowed' : 'text-red-500 hover:bg-red-50 hover:border-red-200'}`}>
                             <Trash2 size={16} />
                           </button>
                         </div>
@@ -336,40 +332,23 @@ const UserManagement = () => {
         )}
       </div>
 
-      {/* Pagination Component */}
       {totalPages > 1 && !loading && (
         <div className="flex justify-end mt-4">
-          <Pagination 
-            currentPage={page} 
-            totalPages={totalPages} 
-            onPageChange={(targetPage) => setPage(targetPage)} 
-          />
+          <Pagination currentPage={page} totalPages={totalPages} onPageChange={(targetPage) => setPage(targetPage)} />
         </div>
       )}
 
       {/* Modal chính chứa Form */}
-      <Modal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        title={modalType === 'CREATE' ? 'Thêm tài khoản người dùng' : 'Chỉnh sửa tài khoản'}
-        size='lg'
-      >
+      <Modal isOpen={isModalOpen} onClose={handleCancelForm} title={modalType === 'CREATE' ? 'Thêm tài khoản người dùng' : 'Chỉnh sửa tài khoản'} size='lg'>
         <UserFormAdmin
           initialData={selectedUser}
           onSubmit={handleFormSubmit}
           onClose={handleCancelForm} 
+          onUploadAvatar={uploadAvatar} // Truyền hàm upload từ store vào form admin để xử lý sửa ảnh
         />
       </Modal>
 
-      {/* Modal xác nhận chặn phụ */}
-      <ConfirmModal
-        isOpen={confirmModal.isOpen}
-        onClose={closeConfirmModal}
-        onConfirm={handleConfirmAction}
-        title={confirmModal.title}
-        message={confirmModal.message}
-        type={confirmModal.type === 'CONFIRM_DELETE' ? 'danger' : 'warning'}
-      />
+      <ConfirmModal isOpen={confirmModal.isOpen} onClose={closeConfirmModal} onConfirm={handleConfirmAction} title={confirmModal.title} message={confirmModal.message} type={confirmModal.type === 'CONFIRM_DELETE' ? 'danger' : 'warning'} />
     </div>
   );
 };

@@ -68,8 +68,7 @@ const register = async (registerData, options = {}) => {
 
   if (useReal) {
     const resp = await api.post(
-      URL_CONSTANT.Auth.REGISTER,
-      payload
+      URL_CONSTANT.Auth.REGISTER, payload
     );
     return resp.data;
   }

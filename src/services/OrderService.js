@@ -183,6 +183,7 @@ const updateOrderStatus = async (
     status,
     note,
   };
+  console.log("payload: ", payload);
 
   if (shouldUseApi(options)) {
     const res = await api.patch(

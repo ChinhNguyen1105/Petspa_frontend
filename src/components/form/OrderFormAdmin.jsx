@@ -186,9 +186,9 @@ const OrderFormAdmin = ({ initialData, onSubmit, onClose, mode }) => {
             className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 focus:outline-none focus:border-orange-500"
           >
             <option value="PENDING">Chờ xử lý (PENDING)</option>
-            <option value="CONFIRMED">Đã xác nhận (CONFIRMED)</option>
-            <option value="SHIPPING">Đang giao hàng (SHIPPING)</option>
-            <option value="COMPLETED">Đã hoàn thành (COMPLETED)</option>
+            <option value="PROCESSING">Đang xử lý (PROCESSING)</option>
+            <option value="SHIPPED">Đang giao hàng (SHIPPING)</option>
+            <option value="DELIVERED">Đã hoàn thành (DELIVERED)</option>
             <option value="CANCELLED">Đã hủy (CANCELLED)</option>
           </select>
         </div>

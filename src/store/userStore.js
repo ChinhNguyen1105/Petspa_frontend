@@ -2,43 +2,18 @@ import { create } from "zustand";
 import UserService from "../services/UserService";
 
 export const useUserStore = create((set, get) => ({
-  // ───────────────────────── STATES ─────────────────────────
+  // ───────────────────────── STATE ─────────────────────────
   users: [],
   meta: null,
   currentUser: null,
 
-  keyword: "",
-  selectedRole: "",
-  selectedActiveFlag: "",
-  selectedDeleteFlag: false,
+  loading: false,
+  detailLoading: false,
 
   page: 1,
   pageSize: 10,
 
-  loading: false,
-  detailLoading: false,
-
-  // ───────────────────────── FILTER SETTERS ─────────────────────────
-  setKeyword: (keyword) => set({ keyword, page: 1 }),
-
-  setSelectedRole: (role) =>
-    set({
-      selectedRole: role === "ALL" ? "" : role,
-      page: 1,
-    }),
-
-  setSelectedActiveFlag: (activeFlag) =>
-    set({
-      selectedActiveFlag: activeFlag,
-      page: 1,
-    }),
-
-  setSelectedDeleteFlag: (deleteFlag) =>
-    set({
-      selectedDeleteFlag: deleteFlag,
-      page: 1,
-    }),
-
+  // ───────────────────────── SETTERS ─────────────────────────
   setPage: (page) => set({ page }),
 
   clearCurrentUser: () =>
@@ -47,36 +22,24 @@ export const useUserStore = create((set, get) => ({
     }),
 
   // ───────────────────────── GET USERS ─────────────────────────
-  fetchUsers: async (overrideParams = {}) => {
+  fetchUsers: async (params = {}) => {
     try {
       set({ loading: true });
 
       const state = get();
 
-      const params = {
-        keyword: state.keyword,
-        role: state.selectedRole || null,
-        activeFlag:
-          state.selectedActiveFlag !== ""
-            ? state.selectedActiveFlag
-            : null,
-        deleteFlag:
-          state.selectedDeleteFlag !== ""
-            ? state.selectedDeleteFlag
-            : null,
+      const res = await UserService.getUsers({
         page: state.page,
-        pageSize: state.pageSize,
-        ...overrideParams,
-      };
-
-      const res = await UserService.getUsers(params);
+        size: state.pageSize,
+        ...params,
+      });
 
       console.log("fetchUsers:", res);
 
       if (res?.status === "SUCCESS") {
         set({
-          users: res.data?.result || [],
-          meta: res.data?.meta || null,
+          users: res?.data?.result || res?.data || [],
+          meta: res?.data?.meta || null,
         });
       } else {
         set({
@@ -96,6 +59,11 @@ export const useUserStore = create((set, get) => ({
         users: [],
         meta: null,
       });
+
+      return {
+        status: "ERROR",
+        message: err.message,
+      };
     } finally {
       set({ loading: false });
     }
@@ -103,8 +71,6 @@ export const useUserStore = create((set, get) => ({
 
   // ───────────────────────── GET USER DETAIL ─────────────────────────
   fetchUserById: async (id) => {
-    if (get().currentUser?.id === id) return;
-
     try {
       set({
         detailLoading: true,
@@ -124,9 +90,14 @@ export const useUserStore = create((set, get) => ({
       return res;
     } catch (err) {
       console.error(
-        `Lỗi khi tải user ID ${id}:`,
+        `Lỗi khi tải user ${id}:`,
         err
       );
+
+      return {
+        status: "ERROR",
+        message: err.message,
+      };
     } finally {
       set({
         detailLoading: false,
@@ -136,7 +107,7 @@ export const useUserStore = create((set, get) => ({
 
   // ───────────────────────── CREATE USER ─────────────────────────
   createUser: async (userData) => {
-    console.log("user create payload store:", userData);
+
     try {
       set({ loading: true });
 
@@ -151,14 +122,6 @@ export const useUserStore = create((set, get) => ({
             res.data,
             ...state.users,
           ],
-          meta: state.meta
-            ? {
-                ...state.meta,
-                total:
-                  (state.meta.total || 0) +
-                  1,
-              }
-            : null,
         }));
       }
 
@@ -172,7 +135,8 @@ export const useUserStore = create((set, get) => ({
       return {
         status: "ERROR",
         message:
-          "Lỗi hệ thống khi tạo user",
+          err?.response?.data?.message ||
+          "Lỗi tạo user",
       };
     } finally {
       set({ loading: false });
@@ -180,23 +144,20 @@ export const useUserStore = create((set, get) => ({
   },
 
   // ───────────────────────── UPDATE USER ─────────────────────────
-  updateUser: async (
-    id,
-    userData
-  ) => {
+  updateUser: async (userData) => {
+    console.log("payload from store: ", userData);
     try {
       set({ loading: true });
 
       const res =
         await UserService.updateUser(
-          id,
           userData
         );
 
       if (res?.status === "SUCCESS") {
         set((state) => ({
           users: state.users.map((u) =>
-            u.id === id
+            u.id === userData.id
               ? {
                   ...u,
                   ...res.data,
@@ -206,7 +167,7 @@ export const useUserStore = create((set, get) => ({
 
           currentUser:
             state.currentUser?.id ===
-            id
+            userData.id
               ? {
                   ...state.currentUser,
                   ...res.data,
@@ -218,67 +179,47 @@ export const useUserStore = create((set, get) => ({
       return res;
     } catch (err) {
       console.error(
-        `Lỗi update user ${id}:`,
+        `Lỗi update user ${userData.id}:`,
         err
       );
 
       return {
         status: "ERROR",
         message:
-          "Lỗi hệ thống khi update user",
+          err?.response?.data?.message ||
+          "Lỗi update user",
       };
     } finally {
       set({ loading: false });
     }
   },
 
-  // ───────────────────────── UPDATE STATUS ─────────────────────────
-  updateUserStatus: async (
-    id,
-    activeFlag
-  ) => {
+  // ───────────────────────── CHANGE STATUS ─────────────────────────
+  updateUserStatus: async (id) => {
     try {
       set({ loading: true });
 
       const res =
-        await UserService.updateStatus(
-          id,
-          activeFlag
+        await UserService.updateUserStatus(
+          id
         );
 
       if (res?.status === "SUCCESS") {
-        set((state) => ({
-          users: state.users.map((u) =>
-            u.id === id
-              ? {
-                  ...u,
-                  activeFlag,
-                }
-              : u
-          ),
-
-          currentUser:
-            state.currentUser?.id ===
-            id
-              ? {
-                  ...state.currentUser,
-                  activeFlag,
-                }
-              : state.currentUser,
-        }));
+        await get().fetchUsers();
       }
 
       return res;
     } catch (err) {
       console.error(
-        `Lỗi update status user ${id}:`,
+        `Lỗi đổi trạng thái user ${id}:`,
         err
       );
 
       return {
         status: "ERROR",
         message:
-          "Lỗi hệ thống khi update status",
+          err?.response?.data?.message ||
+          "Lỗi đổi trạng thái user",
       };
     } finally {
       set({ loading: false });
@@ -295,22 +236,13 @@ export const useUserStore = create((set, get) => ({
 
       if (res?.status === "SUCCESS") {
         set((state) => ({
-          users: state.users.map((u) =>
-            u.id === id
-              ? {
-                  ...u,
-                  deleteFlag: true,
-                }
-              : u
+          users: state.users.filter(
+            (u) => u.id !== id
           ),
 
           currentUser:
-            state.currentUser?.id ===
-            id
-              ? {
-                  ...state.currentUser,
-                  deleteFlag: true,
-                }
+            state.currentUser?.id === id
+              ? null
               : state.currentUser,
         }));
       }
@@ -318,17 +250,107 @@ export const useUserStore = create((set, get) => ({
       return res;
     } catch (err) {
       console.error(
-        `Lỗi delete user ${id}:`,
+        `Lỗi xóa user ${id}:`,
         err
       );
 
       return {
         status: "ERROR",
         message:
-          "Lỗi hệ thống khi delete user",
+          err?.response?.data?.message ||
+          "Lỗi xóa user",
+      };
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  // ───────────────────────── AVATAR ─────────────────────────
+  uploadAvatar: async (
+    userId,
+    file
+  ) => {
+    try {
+      set({ loading: true });
+
+      return await UserService.uploadAvatar(
+        userId,
+        file
+      );
+    } catch (err) {
+      console.error(
+        "Lỗi upload avatar:",
+        err
+      );
+
+      return {
+        status: "ERROR",
+        message:
+          err?.response?.data?.message ||
+          "Lỗi upload avatar",
+      };
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  // ───────────────────────── PROFILE ─────────────────────────
+  fetchProfile: async () => {
+    try {
+      set({
+        detailLoading: true,
+      });
+
+      const res =
+        await UserService.getProfile();
+
+      return res;
+    } catch (err) {
+      console.error(
+        "Lỗi lấy profile:",
+        err
+      );
+
+      return {
+        status: "ERROR",
+        message:
+          err?.response?.data?.message ||
+          "Lỗi lấy profile",
+      };
+    } finally {
+      set({
+        detailLoading: false,
+      });
+    }
+  },
+
+  updateProfile: async (
+    profileData
+  ) => {
+    try {
+      set({ loading: true });
+
+      const res =
+        await UserService.updateProfile(
+          profileData
+        );
+
+      return res;
+    } catch (err) {
+      console.error(
+        "Lỗi cập nhật profile:",
+        err
+      );
+
+      return {
+        status: "ERROR",
+        message:
+          err?.response?.data?.message ||
+          "Lỗi cập nhật profile",
       };
     } finally {
       set({ loading: false });
     }
   },
 }));
+
