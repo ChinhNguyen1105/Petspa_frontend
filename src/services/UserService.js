@@ -130,13 +130,36 @@ const uploadAvatar = async (userId, file) => {
   return res.data;
 };
 
+// const getProfile = async () => {
+  
+//   const response = await api.get(
+//     URL_CONSTANT.User.GET_PROFILE
+//   );
+
+// console.log("get profile", response);
+//   return response.data;
+// };
+
 const getProfile = async () => {
   const response = await api.get(
     URL_CONSTANT.User.GET_PROFILE
   );
 
-console.log("get profile", response);
-  return response.data;
+  const data = response.data?.data;
+
+  const mappedData = {
+    ...data,
+    avatarUrl: data?.avatarUrl
+      ? `${import.meta.env.VITE_API_URL}/upload/avatars/${data.avatarUrl}`
+      : "",
+  };
+
+  console.log("mapped profile:", mappedData);
+
+  return {
+    ...response.data,
+    data: mappedData,
+  };
 };
 
 const updateProfile = async (profileData) => {

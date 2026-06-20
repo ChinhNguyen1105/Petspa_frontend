@@ -29,8 +29,8 @@ const ServiceList = () => {
   // 1. Chỉ gọi API lấy dữ liệu 1 lần duy nhất khi vào trang
   useEffect(() => {
     fetchCategories();
-    // Gọi API lấy TẤT CẢ dịch vụ (Truyền page/size lớn hoặc theo thiết kế của API để lấy hết về)
-    fetchServices({ page: 1, size: 999 }); 
+    // Gọi API lấy TẤT CẢ dịch vụ
+    fetchServices({ page: 1, size: 999 });
   }, [fetchCategories, fetchServices]);
 
   // 2. Lọc danh mục dạng "SERVICE" ở frontend
@@ -40,17 +40,32 @@ const ServiceList = () => {
       : [];
   }, [categories]);
 
-  // 3. LỌC DỮ LIỆU HOÀN TOÀN Ở FRONTEND (Dùng useMemo để tối ưu hiệu năng)
+  // Tìm danh mục hiện tại đang được chọn (phục vụ cho việc lọc theo tên danh mục)
+  const selectedCategory = useMemo(() => {
+    if (filterCategoryId === null) return null;
+    return filteredCategories.find((cat) => cat.id === filterCategoryId);
+  }, [filteredCategories, filterCategoryId]);
+
+  // 3. LỌC DỮ LIỆU HOÀN TOÀN Ở FRONTEND (Đã sửa logic so khớp danh mục)
   const allFilteredServices = useMemo(() => {
     const rawServices = Array.isArray(services) ? services : [];
-    
+
     return rawServices.filter((service) => {
       if (!service) return false;
 
-      // Kiểm tra theo danh mục (Kiểm tra cả categoryId và categoryName phòng hờ)
-      const matchesCategory =
-        filterCategoryId === null || 
-        service.categoryId === filterCategoryId;
+      // Kiểm tra danh mục linh hoạt theo cả ID và Name
+      let matchesCategory = true;
+      if (filterCategoryId !== null) {
+        const matchById = service.categoryId === filterCategoryId;
+
+        // Phòng hờ nếu service.categoryId bị null nhưng có categoryName
+        const matchByName =
+          selectedCategory &&
+          service.categoryName?.trim().toLowerCase() ===
+            selectedCategory.name?.trim().toLowerCase();
+
+        matchesCategory = matchById || matchByName;
+      }
 
       // Kiểm tra theo từ khóa tìm kiếm (tên hoặc mô tả)
       const cleanSearch = searchTerm.trim().toLowerCase();
@@ -61,11 +76,11 @@ const ServiceList = () => {
 
       return matchesCategory && matchesSearch;
     });
-  }, [services, filterCategoryId, searchTerm]);
+  }, [services, filterCategoryId, selectedCategory, searchTerm]);
 
   // 4. PHÂN TRANG HOÀN TOÀN Ở FRONTEND
   const totalPages = Math.ceil(allFilteredServices.length / PAGE_SIZE);
-  
+
   const currentTableData = useMemo(() => {
     const startIndex = (currentPage - 1) * PAGE_SIZE;
     const endIndex = startIndex + PAGE_SIZE;
@@ -101,7 +116,6 @@ const ServiceList = () => {
   return (
     <div className="min-h-screen bg-gray-50/50 pt-10 pb-20 text-left">
       <div className="container mx-auto px-4 lg:px-8 max-w-7xl">
-
         {/* ─── HEADER & FILTER SECTION ─── */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
           <div>
@@ -125,9 +139,9 @@ const ServiceList = () => {
               Tất Cả
             </button>
 
-            {filteredCategories.map((cat, index) => {
-              const categoryName = cat.name || cat.title;
-              const currentId = cat.id !== undefined ? cat.id : index;
+            {filteredCategories.map((cat) => {
+              const categoryName = cat.name;
+              const currentId = cat.id;
               if (!categoryName) return null;
 
               return (
@@ -150,7 +164,10 @@ const ServiceList = () => {
         {/* ─── TOOLBAR ─── */}
         <div className="bg-white p-4 rounded-2xl border border-gray-100 mb-8 flex flex-col sm:flex-row gap-4 justify-between items-center shadow-sm">
           <div className="relative w-full sm:w-96">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              size={18}
+            />
             <input
               type="text"
               value={searchTerm}
@@ -175,7 +192,7 @@ const ServiceList = () => {
               ))}
             </div>
 
-            {/* Thanh phân trang dựa theo dữ liệu đã cắt ở frontend */}
+            {/* Thanh phân trang */}
             {totalPages > 1 && (
               <div className="mt-12 flex justify-center">
                 <Pagination

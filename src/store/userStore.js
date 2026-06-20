@@ -305,6 +305,13 @@ export const useUserStore = create((set, get) => ({
       const res =
         await UserService.getProfile();
 
+      // ĐỒNG BỘ: Lưu dữ liệu trả về vào currentUser của store
+      if (res?.status === "SUCCESS") {
+        set({ currentUser: res.data });
+      } else if (res && !res.status) {
+        // Dự phòng nếu API của bạn trả thẳng object data (không bọc qua res.status)
+        set({ currentUser: res });
+      }
       return res;
     } catch (err) {
       console.error(
@@ -335,7 +342,12 @@ export const useUserStore = create((set, get) => ({
         await UserService.updateProfile(
           profileData
         );
-
+        // ĐỒNG BỘ: Cập nhật ngay lập tức thông tin mới vào currentUser
+      if (res?.status === "SUCCESS") {
+        set({ currentUser: res.data });
+      } else if (res && !res.status) {
+        set({ currentUser: res });
+      }
       return res;
     } catch (err) {
       console.error(

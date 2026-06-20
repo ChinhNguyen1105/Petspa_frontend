@@ -120,7 +120,7 @@ export const useBookingStore = create((set, get) => ({
   cancelBooking: async (id, options = {}) => {
     try {
       const res = await BookingService.cancelBooking(id, options);
-
+      console.log("cancelled ;", res);
       set((state) => ({
         bookings: state.bookings.map((b) =>
           String(b.id) === String(id)

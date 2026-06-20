@@ -35,6 +35,7 @@ const addImages = async (
   productId,
   files
 ) => {
+  console.log("payload: ", { productId, files });
   const formData = new FormData();
 
   formData.append(

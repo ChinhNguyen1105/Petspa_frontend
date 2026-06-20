@@ -78,20 +78,6 @@ const getPetsByUser = async (userId, options = {}) => {
   return { success: true, data: { result: [] } };
 };
 
-/*
-|--------------------------------------------------------------------------
-| GET SPECIES (❗ backend chưa có)
-|--------------------------------------------------------------------------
-*/
-const getSpecies = async (options = {}) => {
-  if (shouldUseApi(options)) {
-    // ❗ CẦN backend species API
-    const resp = await api.get("/species");
-    return resp.data;
-  }
-
-  return { success: true, data: [] };
-};
 
 /*
 |--------------------------------------------------------------------------
@@ -157,7 +143,6 @@ export default {
   getPets,
   getPetById,
   getMyPets,
-  getSpecies,
   createPet,
   updatePet,
   deletePet,

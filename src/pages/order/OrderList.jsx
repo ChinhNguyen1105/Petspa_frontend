@@ -1,16 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Inbox } from 'lucide-react';
-import OrderItem from './OrderItem'; 
-import { useOrderStore } from '../../store/orderStore'; 
-import { useCartStore } from '../../store/cartStore'; 
-import { STATUS_FILTERS } from '../../constants';
+import React, { useState, useEffect } from "react";
+import { ShoppingBag, Inbox } from "lucide-react";
+import OrderItem from "./OrderItem";
+import { useOrderStore } from "../../store/orderStore";
+import { useCartStore } from "../../store/cartStore";
+import { STATUS_FILTERS } from "../../constants";
 
 // Sử dụng mảng bộ lọc trạng thái từ constants
 const TABS = STATUS_FILTERS;
 
 const OrderList = () => {
-  const [activeTab, setActiveTab] = useState('ALL');
-  
+  const [activeTab, setActiveTab] = useState("ALL");
+
   // 🌟 ĐỒNG BỘ STORE MỚI: Lấy đúng state `myOrders` quản lý danh sách của khách hàng
   const { myOrders, loading, fetchMyOrders, cancelOrder } = useOrderStore();
   const { showToast } = useCartStore();
@@ -20,19 +20,19 @@ const OrderList = () => {
     const params = {
       page: 0,
       size: 20,
-      ...(activeTab !== 'ALL' ? { status: activeTab } : {})
+      ...(activeTab !== "ALL" ? { status: activeTab } : {}),
     };
 
     fetchMyOrders(params);
   }, [fetchMyOrders, activeTab]);
-
   // Xử lý hủy đơn hàng trực tiếp từ Client
   const handleCancelOrder = async (orderId) => {
-    if (!window.confirm("Bạn có chắc chắn muốn hủy đơn hàng này không?")) return;
+    if (!window.confirm("Bạn có chắc chắn muốn hủy đơn hàng này không?"))
+      return;
 
     try {
       const res = await cancelOrder(orderId);
-      
+
       // 🌟 ĐỒNG BỘ LOGIC PHẢN HỒI: Service trả về trực tiếp cục `res.data` chứa trường `success`
       if (res && res.success) {
         if (showToast) {
@@ -40,10 +40,10 @@ const OrderList = () => {
         } else {
           alert("Hủy đơn hàng thành công!");
         }
-        
+
         // Nếu người dùng đang đứng ở một tab phân loại cụ thể (ví dụ: Chờ xử lý)
         // Gọi lại fetchMyOrders để danh sách tự động cập nhật ẩn đơn hàng vừa hủy đi
-        if (activeTab !== 'ALL') {
+        if (activeTab !== "ALL") {
           fetchMyOrders({ page: 0, size: 20, status: activeTab });
         }
       } else {
@@ -68,21 +68,25 @@ const OrderList = () => {
           <ShoppingBag size={24} />
         </div>
         <div>
-          <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Đơn hàng đã mua</h2>
-          <p className="text-xs text-slate-400 font-medium">Theo dõi lịch sử mua sắm vật phẩm cho thú cưng</p>
+          <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">
+            Đơn hàng đã mua
+          </h2>
+          <p className="text-xs text-slate-400 font-medium">
+            Theo dõi lịch sử mua sắm vật phẩm cho thú cưng
+          </p>
         </div>
       </div>
 
       {/* Thanh Tabs phân loại trạng thái đơn hàng */}
       <div className="flex border-b border-slate-100 overflow-x-auto custom-scrollbar bg-white rounded-2xl p-1.5 shadow-sm">
-        {TABS.map(tab => (
+        {TABS.map((tab) => (
           <button
             key={tab.value}
             onClick={() => setActiveTab(tab.value)}
             className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl whitespace-nowrap transition-all flex-1 text-center cursor-pointer ${
               activeTab === tab.value
-                ? 'bg-blue-900 text-white shadow-md'
-                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                ? "bg-blue-900 text-white shadow-md"
+                : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
             }`}
           >
             {tab.label}
@@ -94,8 +98,11 @@ const OrderList = () => {
       {loading ? (
         /* Màn hình Skeleton chờ tải dữ liệu */
         <div className="space-y-4">
-          {[1, 2].map(i => (
-            <div key={i} className="bg-white h-36 rounded-3xl animate-pulse border border-slate-100 shadow-sm" />
+          {[1, 2].map((i) => (
+            <div
+              key={i}
+              className="bg-white h-36 rounded-3xl animate-pulse border border-slate-100 shadow-sm"
+            />
           ))}
         </div>
       ) : myOrders.length === 0 ? (
@@ -104,20 +111,24 @@ const OrderList = () => {
           <div className="p-4 bg-slate-50 text-slate-400 rounded-full mb-4">
             <Inbox size={40} />
           </div>
-          <h3 className="text-lg font-bold text-slate-700 mb-1">Lịch sử đơn hàng trống</h3>
+          <h3 className="text-lg font-bold text-slate-700 mb-1">
+            Lịch sử đơn hàng trống
+          </h3>
           <p className="text-sm text-slate-400 font-medium max-w-sm">
-            Bạn hiện chưa có đơn hàng nào trong mục "{TABS.find(t => t.value === activeTab)?.label}". Hãy sắm ngay vài món đồ cho bé cưng nhé!
+            Bạn hiện chưa có đơn hàng nào trong mục "
+            {TABS.find((t) => t.value === activeTab)?.label}". Hãy sắm ngay vài
+            món đồ cho bé cưng nhé!
           </p>
         </div>
       ) : (
         /* DANH SÁCH ĐƠN HÀNG THỰC TẾ */
         <div className="space-y-4">
           {/* 🌟 ĐỒNG BỘ: Map trực tiếp qua `myOrders` nhận được từ Store */}
-          {myOrders.map(order => (
-            <OrderItem 
-              key={order.id} 
-              order={order} 
-              onCancelOrder={handleCancelOrder} 
+          {myOrders.map((order) => (
+            <OrderItem
+              key={order.id}
+              order={order}
+              onCancelOrder={handleCancelOrder}
             />
           ))}
         </div>

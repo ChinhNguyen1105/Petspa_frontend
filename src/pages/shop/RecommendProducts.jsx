@@ -1,16 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { Sparkles, ShoppingBag, Loader2 } from 'lucide-react';
-import ProductCard from '../../components/ui/ProductCard';
+import React, { useEffect, useState, useRef } from "react";
+import { Sparkles, ShoppingBag, Loader2 } from "lucide-react";
+import ProductCard from "../../components/ui/ProductCard";
 
-import { useProductStore } from '../../store/productStore';
-import { useOrderStore } from '../../store/orderStore';
+import { useProductStore } from "../../store/productStore";
+import useRecommendationStore from "../../store/apioriStore";
 
-import useRecommendationStore from '../../store/apioriStore';
-
-const RecommendedProducts = ({ maxItems = 4 }) => {
-  // ================= STORE =================
-  const { orders, fetchOrders } = useOrderStore();
-
+const RecommendedProducts = ({ maxItems = 4, currentCartIds = [] }) => {
+  // ================= STORE CONNECTIONS =================
   const {
     productRecommendations,
     fetchProductRecommendations,
@@ -18,173 +14,136 @@ const RecommendedProducts = ({ maxItems = 4 }) => {
     error: recError,
   } = useRecommendationStore();
 
-  const {
-    products,
-    fetchProducts,
-    loading: prodLoading,
-  } = useProductStore();
+  const { products, fetchProducts, loading: prodLoading } = useProductStore();
 
   const [recommendedList, setRecommendedList] = useState([]);
 
-  // 🔥 KHỞI TẠO GUARD READY STATE ĐỂ ĐỒNG BỘ FLOW
+  // Ref lưu cache chuỗi IDs cũ để ngăn chặn việc trigger re-render gọi API vô hạn
+  const lastFetchedIdsRef = useRef("");
+
   const productsReady = products?.length > 0;
-  const ordersReady = orders?.length > 0;
 
   /* =====================================================
-  | STEP 1: LOAD ORDERS (DEBUG SAFE)
+  | STEP 1: LOAD PRODUCTS NỀN TẢNG HỆ THỐNG
   ===================================================== */
   useEffect(() => {
-    console.log("[STEP 1] orders state:", orders);
-
-    if (!orders?.length) {
-      console.log("[STEP 1] fetching orders...");
-      fetchOrders({ page: 1, pageSize: 5 });
-    }
-  }, [orders, fetchOrders]);
-
-  /* =====================================================
-  | STEP 2: EXTRACT ITEM IDS + DEBUG FULL FLOW (OPTIMIZED)
-  ===================================================== */
-  useEffect(() => {
-    if (!ordersReady) {
-      console.log("[STEP 2] skip - orders not ready yet");
-      return;
-    }
-
-    console.log("[STEP 2] orders changed & ready:", orders);
-
-    const itemIds = Array.from(
-      new Set(
-        orders
-          .flatMap(order => {
-            const items =
-              order.items ||
-              order.orderDetails ||
-              order.cartItems ||
-              [];
-
-            return items.map(item =>
-              item.productId ||
-              item.product?.id ||
-              item.id
-            );
-          })
-          .filter(Boolean)
-      )
-    );
-
-    console.log("[STEP 2] extracted itemIds:", itemIds);
-
-    if (!itemIds.length) {
-      console.warn("[STEP 2] NO ITEM IDS → SKIP RECOMMENDATION API");
-      return;
-    }
-
-    console.log("[STEP 2] calling recommendation API...");
-
-    fetchProductRecommendations(itemIds)
-      .then(res => console.log("[STEP 2] API SUCCESS:", res))
-      .catch(err => console.error("[STEP 2] API ERROR:", err));
-  }, [ordersReady]); // Theo dõi trạng thái Ready của Orders thay vì mảng động
-
-  /* =====================================================
-  | STEP 3: LOAD PRODUCTS
-  ===================================================== */
-  useEffect(() => {
-    console.log("[STEP 3] products state:", products);
-
     if (!products?.length) {
-      console.log("[STEP 3] fetching products...");
       fetchProducts({ page: 1, pageSize: 50 });
     }
   }, [products, fetchProducts]);
 
   /* =====================================================
-  | STEP 4: MAP RECOMMENDATIONS → PRODUCTS (SAFE & FIXED)
+  | STEP 2: PIPELINE APRIORI - CHỈ PHÂN TÍCH KHI CÓ GIỎ HÀNG
   ===================================================== */
   useEffect(() => {
-    console.log("[STEP 4] productRecommendations:", productRecommendations);
-    console.log("[STEP 4] products state ready:", productsReady);
-
-    if (!productRecommendations?.length || !productsReady) {
-      console.warn("[STEP 4] waiting for recommendations or products list...");
+    if (!currentCartIds || currentCartIds.length === 0) {
+      setRecommendedList([]);
+      lastFetchedIdsRef.current = "";
       return;
     }
 
-    // 🔥 FIX LỖI MAPPING SAI KIỂU DỮ LIỆU: Ép toán bộ về String để so khớp chính xác
+    // Làm sạch và ép kiểu mảng ID về Number dứt khoát
+    const cleanProductIds = Array.from(new Set(currentCartIds))
+      .filter(Boolean)
+      .map(Number);
+
+    if (!cleanProductIds.length) return;
+
+    // Chống lặp spam gọi trùng lặp API liên tục khi Re-render dữ liệu
+    const currentIdsString = cleanProductIds.sort().join(",");
+    if (lastFetchedIdsRef.current === currentIdsString) return;
+
+    lastFetchedIdsRef.current = currentIdsString;
+
+    // Gọi API phân tích luật kết hợp Apriori dựa trên các ID sản phẩm đang checkout
+    fetchProductRecommendations(cleanProductIds).catch((err) =>
+      console.error("[APRIORI PRODUCT PIPELINE ERROR]:", err),
+    );
+  }, [currentCartIds, fetchProductRecommendations]);
+
+  /* =====================================================
+  | STEP 3: MAPPING ĐỒNG BỘ ĐẦU RA (KHÔNG CÓ FALLBACK MỒI)
+  ===================================================== */
+  useEffect(() => {
+    // 🔥 CHẶN: Giỏ hàng trống hoặc API không có gợi ý phù hợp thỏa mãn -> Ẩn hoàn toàn, không lấy mồi mặc định
+    if (
+      !currentCartIds.length ||
+      !productRecommendations?.length ||
+      !productsReady
+    ) {
+      setRecommendedList([]);
+      return;
+    }
+
+    // Khớp ID an toàn tuyệt đối bằng chuỗi String
     const mapped = productRecommendations
-      .map(id => products.find(p => String(p.id) === String(id)))
+      .map((id) => products.find((p) => String(p.id) === String(id)))
       .filter(Boolean)
       .slice(0, maxItems);
 
-    console.log("[STEP 4] mapped result successfully:", mapped);
-
     setRecommendedList(mapped);
-  }, [productRecommendations, productsReady, maxItems]); // Lắng nghe dựa trên ready state tối ưu
+  }, [
+    productRecommendations,
+    products,
+    productsReady,
+    maxItems,
+    currentCartIds.length,
+  ]);
 
   /* =====================================================
-  | LOADING STATE (DEBUG SAFE)
-  ===================================================== */
-  const isLoading =
-    (recLoading || prodLoading) &&
-    recommendedList.length === 0;
+  | LOADING & ERROR STATES
+  ==================================================== */
+  const isLoading = (recLoading || prodLoading) && recommendedList.length === 0;
 
-  if (recError) {
-    console.error("[RECOMMENDATION ERROR]:", recError);
-  }
+  if (recError) return null;
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-3">
-        <Loader2 className="animate-spin text-pet-blue" size={32} />
-        <p className="text-sm font-medium">
-          Đang tính toán sản phẩm phù hợp cho bạn...
+      <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-3 bg-white border border-gray-100 rounded-3xl my-10">
+        <Loader2 className="animate-spin text-blue-500" size={28} />
+        <p className="text-xs font-semibold text-gray-500">
+          Đang tính toán sản phẩm mua kèm phù hợp...
         </p>
       </div>
     );
   }
 
-  /* =====================================================
-  | EMPTY STATE
-  ===================================================== */
-  if (!recommendedList.length) {
-    console.warn("[FINAL] recommendedList is empty");
-    return null;
-  }
+  // Nếu giỏ hàng trống hoặc không tìm thấy luật kết hợp phù hợp -> Trả về null ẩn hoàn toàn UI
+  if (!recommendedList.length) return null;
 
   // ================= MAIN RENDER =================
   return (
-    <div className="my-10 bg-gradient-to-b from-blue-50/40 to-transparent p-6 rounded-3xl border border-blue-50/60">
-      
-      {/* Tiêu đề Khối Gợi Ý */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2.5 text-left">
-          <div className="p-2 bg-amber-100 text-amber-600 rounded-xl animate-pulse">
-            <Sparkles size={20} fill="currentColor" />
+    <div className="my-10 bg-slate-50/50 p-6 rounded-3xl border border-gray-100 text-left">
+      {/* Tiêu đề Khối Gợi Ý Tối Giản */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 bg-amber-50 text-amber-500 rounded-lg shrink-0">
+            <Sparkles size={18} fill="currentColor" />
           </div>
           <div>
-            <h2 className="text-lg font-black text-gray-800 uppercase tracking-tight flex items-center gap-2">
-              Sản phẩm thường được mua cùng
+            <h2 className="text-sm font-black text-gray-800 uppercase tracking-tight">
+              Sản phẩm thường được mua cùng đơn hàng của bạn
             </h2>
-            <p className="text-xs text-gray-400 font-medium">
-              Gợi ý thông minh dựa trên thói quen mua sắm của bạn
+            <p className="text-[11px] text-gray-400 font-medium">
+              Gợi ý thông minh dựa trên thói quen mua sắm phối hợp từ hệ thống
+              dữ liệu khách hàng
             </p>
           </div>
         </div>
-        
-        <div className="flex items-center gap-1.5 text-xs font-bold text-pet-blue bg-blue-50 px-3 py-1.5 rounded-full">
-          <ShoppingBag size={13} />
+
+        <div className="flex items-center gap-1 text-[9px] font-bold text-gray-400 bg-white border border-gray-200 px-2.5 py-1 rounded-full w-fit self-start sm:self-center">
+          <ShoppingBag size={11} />
           <span>Apriori System</span>
         </div>
       </div>
 
-      {/* Danh sách lưới sản phẩm gợi ý đặc quyền */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5">
+      {/* Danh sách lưới sản phẩm gợi ý sử dụng lại ProductCard của hệ thống */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
         {recommendedList.map((product) => (
           <div key={product.id} className="relative group">
-            {/* Nhãn Đánh Dấu Sản Phẩm Gợi Ý Cao */}
-            <div className="absolute -top-2 -left-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-md shadow-sm z-10 uppercase tracking-wider flex items-center gap-1">
-              Gợi ý mua kèm ✨
+            {/* Nhãn Đánh Dấu Sản Phẩm Gợi Ý Nhỏ Gọn Đè Góc */}
+            <div className="absolute top-2 left-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] font-extrabold px-2 py-0.5 rounded shadow-sm z-10 uppercase tracking-wider">
+              Gợi ý kèm ✨
             </div>
             <ProductCard product={product} />
           </div>

@@ -1,110 +1,93 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { PawPrint, HeartPulse, Scale, Calendar, FileText, ArrowLeft, Camera, UploadCloud } from 'lucide-react';
-import {Input} from '../../components/common/Input';
-import { Button } from '../../components/common/Button';
-import Loading from '../../components/common/Loading';
-import { usePetStore } from '../../store/petStore';
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import {
+  PawPrint,
+  HeartPulse,
+  Scale,
+  Calendar,
+  FileText,
+  ArrowLeft,
+  Heart,
+} from "lucide-react";
+import { Input } from "../../components/common/Input";
+import { Button } from "../../components/common/Button";
+import Loading from "../../components/common/Loading";
+import { useCartStore } from "../../store/cartStore";
+import { usePetStore } from "../../store/petStore";
 
 const PetEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const fileInputRef = useRef(null);
+  const { showToast } = useCartStore();
 
   // 1. BÓC TÁCH STATE VÀ ACTIONS TỪ ZUSTAND STORE
-  const {
-    currentPet,
-    species,
-    loading,
-    submitting,
-    fetchPetById,
-    fetchSpecies,
-    updatePet
-  } = usePetStore();
+  const { currentPet, loading, submitting, fetchPetById, updatePet } =
+    usePetStore();
 
+  // Form State map chính xác theo ReqUpdatePet của Backend
   const [formData, setFormData] = useState({
-    name: '',
-    speciesId: '', // Lưu ID của loài thay vì string text thuần túy
-    breed: '',
-    weight: '',
-    age: '',
-    notes: '',
-    image: ''
+    id: "",
+    name: "",
+    specie: "",
+    gender: "",
+    birthday: "",
+    weight: "",
+    healthStatus: "",
   });
 
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState('');
   const [localError, setLocalError] = useState(null);
 
-  // 2. FETCH DỮ LIỆU BAN ĐẦU (CHI TIẾT PET & DANH MỤC LOÀI)
+  // 2. FETCH DỮ LIỆU BAN ĐẦU
   useEffect(() => {
     if (id) {
       fetchPetById(id);
     }
-    fetchSpecies(); // Lấy danh sách loài (Chó, Mèo...) về cho thẻ select
-  }, [id, fetchPetById, fetchSpecies]);
+  }, [id, fetchPetById]);
 
-  // 3. ĐỒNG BỘ DỮ LIỆU TỪ STORE VÀO FORM STATE KHI LOAD XONG
+  // 3. ĐỒNG BỘ DỮ LIỆU TỪ STORE VÀO FORM STATE
   useEffect(() => {
     if (currentPet && String(currentPet.id) === String(id)) {
       setFormData({
-        name: currentPet.name || '',
-        speciesId: currentPet.species?.id || '', // Gán ID của species đang có sẵn của bé
-        breed: currentPet.breed || '',
-        weight: currentPet.weight_kg || '',
-        age: currentPet.age || '',
-        notes: currentPet.personality || '',
-        image: currentPet.thumbnail || ''
+        id: currentPet.id || "",
+        name: currentPet.name || "",
+        specie: currentPet.specie || "", // Nếu backend trả về object, map lại thành string: currentPet.specie?.name hoặc giữ nguyên tùy cấu trúc data cũ
+        gender: currentPet.gender || "",
+        birthday: currentPet.birthday || "", // Đảm bảo định dạng yyyy-MM-dd để input[type=date] nhận diện được
+        weight: currentPet.weight || "",
+        healthStatus: currentPet.healthStatus || "",
       });
-      setImagePreview(currentPet.thumbnail || '');
     } else if (!loading && !currentPet) {
       setLocalError("Không tìm thấy thông tin thú cưng.");
     }
   }, [currentPet, id, loading]);
-
-  // 4. XỬ LÝ SỰ KIỆN FILE HÌNH ẢNH
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      if (!file.type.startsWith('image/')) {
-        alert('Vui lòng chỉ chọn file hình ảnh!');
-        return;
-      }
-      setSelectedFile(file);
-      setImagePreview(URL.createObjectURL(file));
-    }
-  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // 5. SUBMIT FORM QUA ZUSTAND ACTION
+  // 4. SUBMIT FORM QUA ZUSTAND ACTION
+  // 4. SUBMIT FORM QUA ZUSTAND ACTION
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Tìm đối tượng species tương ứng với ID người dùng chọn để build đúng cấu trúc API
-    const selectedSpecieObj = species.find(s => String(s.id) === String(formData.speciesId));
 
+    // Sửa lỗi: Bỏ khai báo kiểu dữ liệu Long của Java trong JS
     const submitData = {
+      id: parseInt(formData.id, 10),
       name: formData.name,
-      species: {
-        id: parseInt(formData.speciesId, 10),
-        name: selectedSpecieObj?.name || 'Dog'
-      },
-      breed: formData.breed,
-      weight_kg: parseFloat(formData.weight) || 0,
-      age: parseInt(formData.age, 10) || 0,
-      personality: formData.notes,
-      thumbnail: imagePreview // Đang dùng URL preview/base64 tạm thời của bạn, sau này có thể bọc FormData nếu upload file thô
+      specie: formData.specie,
+      gender: formData.gender,
+      birthday: formData.birthday,
+      weight: parseFloat(formData.weight) || 0,
+      healthStatus: formData.healthStatus || null,
     };
 
     const result = await updatePet(id, submitData);
-    
-    if (result && result.success) {
-      // Quay trở lại trang detail của bé để xem thành quả, cập nhật realtime ngay lập tức!
-      navigate(`/profile/pets/${id}`); 
+    console.log("update success with response: ", result);
+
+    if (result && result.status === "SUCCESS") {
+      showToast(`Cập nhật thông tin thú cưng ${result.data.name} thành công!`);
+      navigate(`/profile`);
     } else {
       alert(result?.message || "Có lỗi xảy ra khi cập nhật thông tin.");
     }
@@ -124,7 +107,7 @@ const PetEdit = () => {
     return (
       <div className="text-center py-12 bg-white rounded-3xl border border-gray-100 shadow-sm max-w-2xl mx-auto">
         <p className="text-red-500 font-bold mb-4">{localError}</p>
-        <Button variant="outline" onClick={() => navigate('/profile')}>
+        <Button variant="outline" onClick={() => navigate("/profile")}>
           Quay lại hồ sơ
         </Button>
       </div>
@@ -133,11 +116,10 @@ const PetEdit = () => {
 
   return (
     <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm text-left max-w-2xl mx-auto">
-      
       {/* Header */}
       <div className="flex items-center gap-4 pb-4 border-b border-gray-50 mb-6">
-        <button 
-          onClick={() => navigate(-1)} 
+        <button
+          onClick={() => navigate(-1)}
           className="p-2 hover:bg-gray-50 rounded-xl text-gray-500 transition-colors"
           type="button"
         >
@@ -147,53 +129,13 @@ const PetEdit = () => {
           <h2 className="text-xl font-black text-pet-blue uppercase tracking-tight flex items-center gap-2">
             <PawPrint size={22} /> Chỉnh sửa thông tin bé
           </h2>
-          <p className="text-xs text-gray-400 font-medium">Cập nhật hình ảnh, cân nặng để phục vụ tại spa chuẩn xác nhất</p>
+          <p className="text-xs text-gray-400 font-medium">
+            Cập nhật chính xác các thông tin cơ bản phục vụ cho việc quản lý
+          </p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        
-        {/* KHU VỰC CẬP NHẬT HÌNH ẢNH (AVATAR UPLOAD) */}
-        <div className="flex flex-col items-center justify-center py-4 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200 mb-2">
-          <div className="relative group w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-md bg-gray-100">
-            {imagePreview ? (
-              <img 
-                src={imagePreview} 
-                alt="Pet Preview" 
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                <UploadCloud size={28} />
-              </div>
-            )}
-            
-            <button
-              type="button"
-              onClick={() => fileInputRef.current.click()}
-              className="absolute inset-0 bg-black/40 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-            >
-              <Camera size={20} />
-            </button>
-          </div>
-          
-          <button 
-            type="button"
-            onClick={() => fileInputRef.current.click()}
-            className="mt-3 text-xs font-bold text-pet-blue hover:underline flex items-center gap-1"
-          >
-            Thay đổi ảnh đại diện của bé
-          </button>
-          
-          <input 
-            type="file"
-            ref={fileInputRef}
-            onChange={handleImageChange}
-            accept="image/*"
-            className="hidden"
-          />
-        </div>
-
         {/* Tên Thú Cưng */}
         <Input
           label="Tên của bé *"
@@ -205,74 +147,78 @@ const PetEdit = () => {
           required
         />
 
-        {/* Phân loại & Giống */}
+        {/* Loài & Giới Tính */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Input
+            label="Loài sinh vật * (Specie)"
+            icon={HeartPulse}
+            name="specie"
+            value={formData.specie}
+            onChange={handleInputChange}
+            placeholder="Ví dụ: DOG, CAT..."
+            required
+          />
+
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center gap-1">
-              <HeartPulse size={15} className="text-gray-400" /> Loại thú cưng
+              <Heart size={15} className="text-gray-400" /> Giới tính *
             </label>
             <select
-              name="speciesId"
-              value={formData.speciesId}
+              name="gender"
+              value={formData.gender}
               onChange={handleInputChange}
               required
               className="w-full px-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm font-medium transition-all outline-none focus:border-pet-blue focus:ring-2 focus:ring-pet-blue/10 h-[46px]"
             >
-              <option value="" disabled>-- Chọn loài thú cưng --</option>
-              {species.map((spec) => (
-                <option key={spec.id} value={spec.id}>
-                  {spec.name === 'DOG' || spec.name === 'Dog' ? 'Chó (Dog)' : spec.name === 'CAT' || spec.name === 'Cat' ? 'Mèo (Cat)' : spec.name}
-                </option>
-              ))}
+              <option value="" disabled>
+                -- Chọn giới tính --
+              </option>
+              <option value="MALE">Đực (MALE)</option>
+              <option value="FEMALE">Cái (FEMALE)</option>
+              <option value="UNKNOWN">Chưa rõ (UNKNOWN)</option>
             </select>
           </div>
-
-          <Input
-            label="Chủng tộc / Giống"
-            icon={HeartPulse}
-            name="breed"
-            value={formData.breed}
-            onChange={handleInputChange}
-            placeholder="Ví dụ: Corgi, Mèo Anh lông ngắn..."
-          />
         </div>
 
-        {/* Cân nặng & Tuổi */}
+        {/* Ngày sinh & Cân nặng */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Input
+            label="Ngày sinh * (Birthday)"
+            icon={Calendar}
+            type="date"
+            name="birthday"
+            value={formData.birthday}
+            onChange={handleInputChange}
+            max={new Date().toISOString().split("T")[0]} // Giới hạn @PastOrPresent từ Client
+            required
+          />
+
           <Input
             label="Cân nặng (kg) *"
             icon={Scale}
             type="number"
             step="0.1"
+            min="0.1" // Khống chế @Positive tránh số âm hoặc bằng 0
             name="weight"
             value={formData.weight}
             onChange={handleInputChange}
             placeholder="Ví dụ: 4.5"
             required
           />
-
-          <Input
-            label="Tuổi (Tháng hoặc tuổi)"
-            icon={Calendar}
-            type="number"
-            name="age"
-            value={formData.age}
-            onChange={handleInputChange}
-            placeholder="Ví dụ: 2"
-          />
         </div>
 
-        {/* Ghi chú */}
+        {/* Tình trạng sức khỏe */}
         <div>
           <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center gap-1">
-            <FileText size={15} className="text-gray-400" /> Ghi chú đặc biệt cho Spa
+            <FileText size={15} className="text-gray-400" /> Tình trạng sức khỏe
+            (Health Status)
           </label>
           <textarea
-            name="notes"
-            value={formData.notes}
+            name="healthStatus"
+            value={formData.healthStatus}
             onChange={handleInputChange}
             rows="3"
-            placeholder="Ví dụ: Bé sợ tiếng sấy tóc, dị ứng với xà phòng hương sen..."
+            placeholder="Mô tả tình trạng sức khỏe hiện tại của bé (nếu có)..."
             className="w-full px-4 py-3 border border-gray-200 rounded-2xl text-sm font-medium transition-all outline-none focus:border-pet-blue focus:ring-2 focus:ring-pet-blue/10 resize-none"
           />
         </div>
