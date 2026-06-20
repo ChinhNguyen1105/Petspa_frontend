@@ -67,6 +67,8 @@ const BookingCreate = () => {
 
   const totalDuration =
     selectedServices.reduce((sum, s) => sum + (s.durationMin || 0), 0) || 30;
+
+  // ĐÃ SỬA: Đóng mở ngoặc chuẩn xác cho hàm reduce
   const totalAmount = selectedServices.reduce(
     (sum, s) => sum + (s.basePrice || 0),
     0,
@@ -211,7 +213,6 @@ const BookingCreate = () => {
   // ─── XỬ LÝ KHI NGƯỜI DÙNG CHỌN DỊCH VỤ TỪ KHỐI GỢI Ý ───
   const handleSelectRecommendedService = (id) => {
     handleServiceToggle(id);
-    // Cuộn mượt lên trên để người dùng thấy dịch vụ đã được thêm vào hóa đơn
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -252,7 +253,12 @@ const BookingCreate = () => {
       const response = await createBooking(payload);
 
       if (response?.success !== false && response?.data) {
-        setCreatedBookingData({ id: response.data?.id, amount: totalAmount });
+        // setCreatedBookingData({ id: response.data?.id, amount: totalAmount });
+        setCreatedBookingData({
+          id: response.data?.orderId, // id luôn là Order ID
+          bookingId: response.data?.id,
+          amount: totalAmount,
+        });
         setIsPaymentModalOpen(true);
       } else {
         setErrors({
@@ -300,9 +306,6 @@ const BookingCreate = () => {
           />
         </div>
 
-        {/* 🔥 TRUYỀN DANH SÁCH ID ĐANG CHỌN (CART) VÀO COMPONENT RECOMMENDED
-          Nếu chưa chọn gì, component sẽ tự dùng mảng bookings cũ để gợi ý hoặc lấy mặc định.
-        */}
         <RecommendedServices
           currentCartIds={formData.serviceIds}
           onServiceSelect={handleSelectRecommendedService}

@@ -51,6 +51,7 @@ import RoleManagement from "./pages/admin/roles/roleManagement";
 import InventoryListManagement from "./pages/admin/inventory/inventoryListManagement";
 import InventoryTransManagement from "./pages/admin/inventory/inventoryTransManagement";
 import PermissionManagement from "./pages/admin/roles/permissionManagement";
+import VNPayReturnPage from "./pages/shop/VNPayReturnPage";
 
 // ----------------------------------------------------------------------
 // ROUTE GUARDS
@@ -172,6 +173,14 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/order-success"
+            element={
+              <ProtectedRoute>
+                <VNPayReturnPage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* PROFILE & PETS */}
           <Route
@@ -248,10 +257,7 @@ function App() {
               path="/admin/products/list"
               element={<ProductManagement />}
             />
-            <Route
-              path="/admin/categories"
-              element={<CategoryManagement />}
-            />
+            <Route path="/admin/categories" element={<CategoryManagement />} />
             <Route
               path="/admin/services/list"
               element={<ServiceManagement />}
@@ -262,9 +268,18 @@ function App() {
             <Route path="/admin/reports" element={<RevenueReport />} />
 
             <Route path="/admin/roles" element={<RoleManagement />} />
-            <Route path="/admin/inventory/list" element={<InventoryListManagement />} />
-            <Route path="/admin/inventory/transaction" element={<InventoryTransManagement />} />
-            <Route path="/admin/permission" element={<PermissionManagement />} />
+            <Route
+              path="/admin/inventory/list"
+              element={<InventoryListManagement />}
+            />
+            <Route
+              path="/admin/inventory/transaction"
+              element={<InventoryTransManagement />}
+            />
+            <Route
+              path="/admin/permission"
+              element={<PermissionManagement />}
+            />
           </Route>
 
           {/* ========================================================= */}

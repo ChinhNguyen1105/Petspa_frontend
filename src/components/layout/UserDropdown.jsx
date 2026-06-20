@@ -21,8 +21,6 @@ const UserDropdown = () => {
     }
   }, [authUser, fetchProfile]); // Dependency là authUser chứ không phải currentUser
 
-  console.log("Dữ liệu currentUser hiện tại: ", currentUser);
-
   const handleLogout = () => {
     logout();
     navigate("/login");

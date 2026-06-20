@@ -8,6 +8,8 @@ import {
   Plus,
   X,
   Image,
+  AlertTriangle,
+  ShieldCheck,
 } from "lucide-react";
 import { Button } from "../../components/common/Button";
 import { Badge } from "../../components/ui/Badge";
@@ -19,6 +21,7 @@ import { useOrderStore } from "../../store/orderStore";
 import { useAddressStore } from "../../store/addressStore";
 import { formatPrice } from "../../utils/formatPrice";
 import { useProductImageStore } from "../../store/productImageStore";
+import Modal from "../../components/common/Modal";
 
 import PaymentModal from "../../components/common/PaymentModal";
 
@@ -146,6 +149,9 @@ const Checkout = () => {
   const [createdOrderData, setCreatedOrderData] = useState(null);
   const [editingAddress, setEditingAddress] = useState(null);
 
+  // 🔥 Thêm trạng thái hiển thị Overlay xác nhận đặt đơn hàng
+  const [showConfirmOverlay, setShowConfirmOverlay] = useState(false);
+
   // Đồng bộ tải dữ liệu ban đầu
   useEffect(() => {
     fetchCart();
@@ -181,12 +187,18 @@ const Checkout = () => {
     setShowAddForm(false);
   };
 
-  // Xử lý hành động Đặt hàng chính
-  const handlePlaceOrder = async () => {
+  // Bước 1: Khi khách hàng nhấn "Xác nhận đặt đơn", chỉ mở màn hình Overlay kiểm tra lại thông tin
+  const handleVerifyOrderClick = () => {
     if (!selectedAddress) {
       alert("Vui lòng chọn hoặc thêm địa chỉ nhận hàng!");
       return;
     }
+    setShowConfirmOverlay(true);
+  };
+
+  // Bước 2: Khách hàng đồng ý mua tại Overlay -> Thực thi API tạo đơn chính thức lên DB
+  const handleExecuteOrder = async () => {
+    setShowConfirmOverlay(false); // Ẩn overlay xác nhận đi để nhường chỗ cho loading/VNPAY
 
     const orderPayload = {
       cartItemIds: itemDtoList.map((item) => item.id),
@@ -200,7 +212,7 @@ const Checkout = () => {
     const orderData = res?.data || res;
 
     if (res?.success || orderData) {
-      if (paymentMethod === "BANKING") {
+      if (paymentMethod === "VNPAY") {
         setCreatedOrderData(orderData);
         setShowPaymentModal(true);
       } else {
@@ -331,23 +343,23 @@ const Checkout = () => {
               </label>
 
               <label
-                className={`flex items-center p-4 border rounded-xl cursor-pointer transition-all ${paymentMethod === "BANKING" ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-gray-200 hover:bg-gray-50"}`}
+                className={`flex items-center p-4 border rounded-xl cursor-pointer transition-all ${paymentMethod === "VNPAY" ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-gray-200 hover:bg-gray-50"}`}
               >
                 <input
                   type="radio"
                   name="payment"
-                  value="BANKING"
-                  checked={paymentMethod === "BANKING"}
+                  value="VNPAY"
+                  checked={paymentMethod === "VNPAY"}
                   onChange={(e) => setPaymentMethod(e.target.value)}
                   className="w-4 h-4 text-primary focus:ring-primary border-gray-300 cursor-pointer"
                 />
                 <div className="ml-4">
                   <p className="font-bold text-gray-800">
-                    Thanh toán qua cổng tự động QR VietQR / Banking
+                    Thanh toán trực tuyến qua cổng VNPAY (QR / Banking)
                   </p>
                   <p className="text-xs text-gray-500 font-medium mt-0.5">
-                    Hệ thống hiển thị mã QR kèm nội dung chuyển khoản tự động
-                    quét khớp đơn
+                    Quét mã QR bằng ứng dụng ngân hàng để thanh toán tự động
+                    khớp đơn an toàn
                   </p>
                 </div>
               </label>
@@ -379,15 +391,16 @@ const Checkout = () => {
             </div>
             <div className="flex justify-between items-center text-base font-bold text-gray-800 border-t border-gray-100 pt-3 mt-1">
               <span className="text-sm text-gray-600 font-bold">Tổng cộng</span>
-              <span className="text-2xl text-pet-orange font-black">
+              <span className="text-2xl text-orange-500 font-black">
                 {formatPrice(totalAmount)}
               </span>
             </div>
           </div>
 
+          {/* 🔥 Gọi hàm verify mở overlay thay vì chạy trực tiếp API */}
           <Button
             className="w-full py-4 text-sm font-black uppercase tracking-widest rounded-2xl shadow-lg shadow-blue-500/10"
-            onClick={handlePlaceOrder}
+            onClick={handleVerifyOrderClick}
             disabled={isSubmitting || itemDtoList.length === 0}
           >
             {isSubmitting ? "Đang xử lý đơn hàng..." : "Xác nhận đặt đơn"}
@@ -397,6 +410,82 @@ const Checkout = () => {
 
       {/* 🔥 TRUYỀN DANH SÁCH IDS GIỎ HÀNG VÀO ĐỂ HIỂN THỊ ĐỀ XUẤT SẢN PHẨM PHÙ HỢP */}
       <RecommendedProducts currentCartIds={currentCartProductIds} />
+
+      {/* --- 🔥 OVERLAY XÁC NHẬN LẠI THÔNG TIN ĐƠN HÀNG TRƯỚC KHI ĐẶT --- */}
+      {showConfirmOverlay && selectedAddress && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl relative border border-gray-100 animate-in fade-in zoom-in-95 duration-200 text-left">
+            {/* Header Overlay */}
+            <div className="flex items-center gap-2 text-amber-500 font-black border-b border-gray-100 pb-3 mb-4">
+              <AlertTriangle size={20} />
+              <span className="uppercase text-sm tracking-wider text-gray-800">
+                Xác nhận thông tin mua hàng
+              </span>
+            </div>
+
+            {/* Nội dung thông tin tóm tắt */}
+            <div className="space-y-4 mb-6">
+              <p className="text-xs text-gray-400 font-medium">
+                Vui lòng rà soát chính xác địa chỉ và phương thức thanh toán
+                trước khi hệ thống tạo hóa đơn giao hàng.
+              </p>
+
+              {/* Chi tiết người nhận */}
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-gray-150 space-y-1">
+                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  Địa chỉ giao hàng:
+                </div>
+                <div className="font-bold text-gray-800 text-sm">
+                  {selectedAddress.fullName || selectedAddress.recipient_name} —{" "}
+                  {selectedAddress.phone || selectedAddress.phone_number}
+                </div>
+                <div className="text-xs text-gray-500 leading-relaxed font-medium mt-0.5">
+                  {selectedAddress.fullAddress ||
+                    `${selectedAddress.detail_address}, ${selectedAddress.district_ward}, ${selectedAddress.province_city}`}
+                </div>
+              </div>
+
+              {/* Chi tiết tổng tiền & phương thức */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 p-3 rounded-xl border border-gray-150">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                    Hình thức:
+                  </div>
+                  <div className="text-xs font-black text-gray-700 mt-1">
+                    {paymentMethod === "COD"
+                      ? "Thanh toán COD"
+                      : "Cổng trực tuyến VNPAY"}
+                  </div>
+                </div>
+                <div className="bg-orange-50/60 p-3 rounded-xl border border-orange-100">
+                  <div className="text-[10px] font-bold text-orange-400 uppercase tracking-wider">
+                    Tổng số tiền:
+                  </div>
+                  <div className="text-base font-black text-orange-600 mt-0.5">
+                    {formatPrice(totalAmount)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Nút hành động lựa chọn */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConfirmOverlay(false)}
+                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold text-xs rounded-xl transition-colors cursor-pointer border-none"
+              >
+                Thay đổi lại
+              </button>
+              <button
+                onClick={handleExecuteOrder}
+                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer border-none shadow-md shadow-blue-500/10 flex items-center justify-center gap-1"
+              >
+                <ShieldCheck size={14} /> Tôi xác nhận đặt
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- OVERLAY / MODAL CHỌN ĐỊA CHỈ & FORM THÊM MỚI / SỬA --- */}
       {showAddressOverlay && (
@@ -517,6 +606,13 @@ const Checkout = () => {
             navigate("/order-success", { state: { order: createdOrderData } });
           }}
           orderData={createdOrderData}
+          onPaymentSuccess={() => {
+            setShowPaymentModal(false);
+            clearCart();
+            navigate("/order-success", {
+              state: { order: { ...createdOrderData, isPaid: true } },
+            });
+          }}
         />
       )}
     </div>

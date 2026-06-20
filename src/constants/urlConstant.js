@@ -205,5 +205,6 @@ export const URL_CONSTANT = {
     PREFIX: '/payment/vnpay',
     CREATE_PAYMENT: '/payment/vnpay/create',
     HANDLE_RETURN: '/payment/vnpay/return',
+    GET_PAYMENT_STATUS: '/payment/vnpay/status',
   },
 };

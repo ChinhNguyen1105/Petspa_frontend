@@ -81,25 +81,31 @@ public ResponseEntity<?> getMyOrders(
 
 const getMyOrders = async (
   {
-    status,
+    status = null,
     page = 0,
     size = 10,
-    sort,
+    sort = null,
   } = {},
   options = {}
 ) => {
-  console.log("payload :", { status, sort });
-
   if (shouldUseApi(options)) {
-    const res = await api({
-  method: "GET",
-  url: URL_CONSTANT.Order.GET_MY_ORDERS,
-      params: {
-    status,
-    page,
-    size,
-  },
-});
+    const params = {
+      page,
+      size,
+    };
+
+    if (status) {
+      params.status = status;
+    }
+
+    if (sort) {
+      params.sort = sort;
+    }
+
+    const res = await api.get(
+      URL_CONSTANT.Order.GET_MY_ORDERS,
+      { params }
+    );
 
     return res.data;
   }
