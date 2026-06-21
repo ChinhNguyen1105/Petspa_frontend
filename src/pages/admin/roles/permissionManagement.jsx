@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { usePermissionStore } from "../../../store/permissionStore";
 import { useCartStore } from "../../../store/cartStore"; // Sử dụng showToast đồng bộ hệ thống
 
@@ -20,6 +20,21 @@ import {
 import Loading from "../../../components/common/Loading";
 import ConfirmModal from "../../../components/common/ConfirmModal";
 import Pagination from "../../../components/common/Pagination";
+
+// ── KHAI BÁO DANH SÁCH MODULE CỐ ĐỊNH KHÔNG PHỤ THUỘC DATA API ──
+const MODULE_OPTIONS = [
+  { value: "AUTH", label: " AUTHENTICATION" },
+  { value: "USER", label: " USER (NGƯỜI DÙNG)" },
+  { value: "ROLE", label: " ROLE (VAI TRÒ)" },
+  { value: "PERMISSION", label: " PERMISSION (QUYỀN HẠN)" },
+  { value: "PRODUCT", label: " PRODUCT (SẢN PHẨM)" },
+  { value: "PET", label: " PET (THÚ CƯNG)" },
+  { value: "SPA", label: " SPA SERVICE (DỊCH VỤ SPA)" },
+  { value: "BOOKING", label: " BOOKING (LỊCH ĐẶT)" },
+  { value: "ORDER", label: " ORDER (ĐƠN HÀNG)" },
+  { value: "CART", label: " CART (GIỎ HÀNG)" },
+  { value: "SYSTEM", label: " SYSTEM (HỆ THỐNG)" },
+];
 
 const PermissionManagement = () => {
   // ── 1. ĐỒNG BỘ STORE QUYỀN HẠN (usePermissionStore) ──
@@ -46,7 +61,7 @@ const PermissionManagement = () => {
 
   // ── LOCAL STATE ──
   const [searchKeyword, setSearchKeyword] = useState("");
-  const [selectedModule, setSelectedModule] = useState(""); // Lưu trạng thái module cần lọc ở Frontend
+  const [selectedModule, setSelectedModule] = useState(""); // Lưu trạng thái module lọc
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(10);
 
@@ -67,56 +82,73 @@ const PermissionManagement = () => {
     permissionName: "",
   });
 
-  // ── 2. TỰ ĐỘNG GOM DANH SÁCH MODULES DUY NHẤT TỪ DATA ĐỂ LÀM OPTIONS ──
-  const uniqueModules = useMemo(() => {
-    if (!permissions || permissions.length === 0) return [];
-    // Gom tất cả các module hiện có, loại bỏ khoảng trắng và chuyển sang chữ hoa
-    const modules = permissions
-      .map((p) => p.module?.trim().toUpperCase())
-      .filter((mod) => !!mod);
-    return [...new Set(modules)].sort(); // Lọc trùng lặp và sắp xếp theo danh mục A-Z
-  }, [permissions]);
+  // ── 2. TẠO FILTER STRING ĐỂ TRUYỀN XUỐNG BACKEND API ──
+  const buildFilterQuery = (keyword, moduleVal) => {
+    let filterArray = [];
+
+    if (keyword?.trim()) {
+      // Tìm kiếm đồng thời theo name HOẶC apiPath (sử dụng dấu nháy đơn ' ở đầu cho điều kiện OR)
+      // Kết quả ra: name~*keyword*,'apiPath~*keyword*
+      filterArray.push(`name~*${keyword.trim()}*`);
+      filterArray.push(`'apiPath~*${keyword.trim()}*`);
+    }
+
+    if (moduleVal) {
+      // Lọc chính xác theo Phân hệ (Module) - dùng toán tử bằng ':' thay vì bọc nháy đơn
+      // Kết quả ra: module:USER
+      filterArray.push(`module:${moduleVal}`);
+    }
+
+    // Ghép các điều kiện lại với nhau bằng dấu phẩy `,` (Mặc định là phép toán AND)
+    return filterArray.length > 0 ? filterArray.join(",") : undefined;
+  };
 
   // ── 3. NẠP VÀ LỌC DỮ LIỆU KẾT HỢP QUA BACKEND API ──
   const loadData = () => {
+    const filterQuery = buildFilterQuery(searchKeyword, selectedModule);
     fetchPermissions({
       page: currentPage,
       pageSize: pageSize,
-      keyword: searchKeyword || undefined,
+      filter: filterQuery,
     });
   };
 
+  // Tự động gọi lại API khi thay đổi Số trang hoặc bộ lọc Phân hệ (Module)
   useEffect(() => {
     loadData();
-  }, [currentPage, pageSize]);
+  }, [currentPage, pageSize, selectedModule]);
 
-  // Xử lý tìm kiếm qua form submit
+  // Xử lý tìm kiếm qua form submit bằng nút nhấn hoặc phím Enter
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     setCurrentPage(1);
+    const filterQuery = buildFilterQuery(searchKeyword, selectedModule);
     fetchPermissions({
       page: 1,
       pageSize: pageSize,
-      keyword: searchKeyword || undefined,
+      filter: filterQuery,
     });
   };
 
-  // ── 4. TÍNH TOÁN DỮ LIỆU HIỂN THỊ SAU KHI LỌC THÊM THEO MODULE ──
-  const filteredPermissions = useMemo(() => {
-    if (!selectedModule) return permissions;
-    return permissions.filter(
-      (item) =>
-        item.module?.trim().toUpperCase() === selectedModule.toUpperCase(),
-    );
-  }, [permissions, selectedModule]);
-
-  // Khi thay đổi select module, reset trang về trang 1
+  // Khi thay đổi select module ở bộ lọc, reset trang về trang 1
   const handleModuleChange = (e) => {
     setSelectedModule(e.target.value);
     setCurrentPage(1);
   };
 
-  // ── 5. XỬ LÝ ĐÓNG/MỞ FORM MODAL (THÊM / SỬA) ──
+  // Làm sạch toàn bộ bộ lọc và yêu cầu dữ liệu ban đầu
+  const handleResetFilters = () => {
+    setSearchKeyword("");
+    setSelectedModule("");
+    setCurrentPage(1);
+    fetchPermissions({
+      page: 1,
+      pageSize: pageSize,
+      filter: undefined,
+    });
+  };
+
+  // ── 4. XỬ LÝ ĐÓNG/MỞ FORM MODAL (THÊM / SỬA) ──
   const openCreateModal = () => {
     setEditingPermission(null);
     setFormData({ name: "", apiPath: "", method: "GET", module: "" });
@@ -168,7 +200,7 @@ const PermissionManagement = () => {
     }
   };
 
-  // ── 6. XỬ LÝ XOÁ PERMISSION ──
+  // ── 5. XỬ LÝ XOÁ PERMISSION ──
   const triggerDeletePermission = (permission) => {
     setConfirmDeleteModal({
       isOpen: true,
@@ -243,38 +275,43 @@ const PermissionManagement = () => {
         </button>
       </div>
 
-      {/* THANH TÌM KIẾM & BỘ LỌC ĐÃ ĐƯỢC NÂNG CẤP THÊM SELECT */}
+      {/* THANH TÌM KIẾM & BỘ LỌC ĐÃ ĐƯỢC TÁCH BIỆT DATA */}
+      {/* THANH TÌM KIẾM & BỘ LỌC ĐÃ ĐƯỢC TÁCH BIỆT DATA */}
       <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row gap-3 justify-between items-center">
         <div className="w-full md:w-auto flex flex-col sm:flex-row items-center gap-3 flex-1">
-          {/* Nhập text tìm kiếm */}
+          {/* Ô NHẬP TEXT TÌM KIẾM (Đã chuyển icon thành NÚT ẤN) */}
           <form
             onSubmit={handleSearchSubmit}
-            className="w-full sm:w-80 relative"
+            className="w-full sm:w-80 relative group"
           >
             <input
               type="text"
               placeholder="Tìm theo tên quyền, API path..."
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 text-sm rounded-xl focus:outline-none focus:border-orange-400 focus:bg-white transition-all font-medium text-slate-700"
+              className="w-full pl-11 pr-4 py-2 bg-gray-50 border border-gray-200 text-sm rounded-xl focus:outline-none focus:border-orange-400 focus:bg-white transition-all font-medium text-slate-700"
             />
-            <Search
-              size={16}
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
-            />
+            {/* Nút Tìm kiếm đặt ngay trong ô input */}
+            <button
+              type="submit"
+              title="Ấn để tìm kiếm"
+              className="absolute left-1 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-orange-500 rounded-lg hover:bg-gray-200/60 transition-all active:scale-90"
+            >
+              <Search size={16} className="transition-colors" />
+            </button>
           </form>
 
-          {/* Select chọn phân hệ (Module) */}
-          <div className="w-full sm:w-52 relative">
+          {/* Select chọn phân hệ (Module) - Không phụ thuộc data */}
+          <div className="w-full sm:w-56 relative">
             <select
               value={selectedModule}
               onChange={handleModuleChange}
               className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 text-sm rounded-xl focus:outline-none focus:border-orange-400 focus:bg-white transition-all font-bold text-slate-700 appearance-none cursor-pointer"
             >
               <option value="">✨ Tất cả phân hệ</option>
-              {uniqueModules.map((mod) => (
-                <option key={mod} value={mod}>
-                  📦 {mod}
+              {MODULE_OPTIONS.map((mod) => (
+                <option key={mod.value} value={mod.value}>
+                  {mod.label}
                 </option>
               ))}
             </select>
@@ -287,11 +324,7 @@ const PermissionManagement = () => {
 
         <button
           type="button"
-          onClick={() => {
-            setSearchKeyword("");
-            setSelectedModule("");
-            loadData();
-          }}
+          onClick={handleResetFilters}
           className="w-full md:w-auto flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-gray-200 text-xs font-bold text-gray-600 rounded-xl hover:bg-gray-50 transition-all active:scale-95 shadow-xs"
         >
           <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
@@ -308,11 +341,11 @@ const PermissionManagement = () => {
 
       {/* BẢNG HIỂN THỊ DỮ LIỆU */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        {loading && filteredPermissions.length === 0 ? (
+        {loading && permissions.length === 0 ? (
           <div className="flex h-[40vh] items-center justify-center">
             <Loading size="large" />
           </div>
-        ) : filteredPermissions.length === 0 ? (
+        ) : permissions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-400 font-medium space-y-2">
             <Layers size={40} className="text-gray-300" />
             <span>
@@ -333,7 +366,7 @@ const PermissionManagement = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 text-sm">
-                {filteredPermissions.map((item) => (
+                {permissions.map((item) => (
                   <tr
                     key={item.id}
                     className="hover:bg-gray-50/50 transition-colors group"
@@ -386,15 +419,13 @@ const PermissionManagement = () => {
           </div>
         )}
 
-        {/* ── KHU VỰC CHÂN BẢNG TÍCH HỢP COMPONENT PAGINATION ── */}
+        {/* PHÂN TRANG */}
         {meta && meta.pages > 1 && (
           <div className="bg-gray-50/40 px-5 py-5 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
             <span className="text-xs font-bold text-gray-400 order-2 sm:order-1">
               Hiển thị{" "}
-              <span className="text-slate-700">
-                {filteredPermissions.length}
-              </span>{" "}
-              / {meta.total} bản ghi dữ liệu.
+              <span className="text-slate-700">{permissions.length}</span> /{" "}
+              {meta.total} bản ghi dữ liệu.
             </span>
             <div className="order-1 sm:order-2">
               <Pagination
@@ -407,7 +438,7 @@ const PermissionManagement = () => {
         )}
       </div>
 
-      {/* FORM MODAL: THÊM / SỬA */}
+      {/* FORM MODAL: THÊM / SỬA (ĐÃ BỔ SUNG SELECT MODULE) */}
       {isFormModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 w-full max-w-lg overflow-hidden animate-scale-up">
@@ -451,7 +482,7 @@ const PermissionManagement = () => {
                     name="method"
                     value={formData.method}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-200 text-sm font-bold rounded-xl focus:outline-none focus:border-orange-400 text-slate-700 bg-white"
+                    className="w-full px-3 py-2 border border-gray-200 text-sm font-bold rounded-xl focus:outline-none focus:border-orange-400 text-slate-700 bg-white cursor-pointer"
                   >
                     <option value="GET">GET</option>
                     <option value="POST">POST</option>
@@ -462,19 +493,27 @@ const PermissionManagement = () => {
                   </select>
                 </div>
 
+                {/* THAY THẾ Ô INPUT BẰNG SELECT MODULE ĐỂ ĐỒNG BỘ DỮ LIỆU */}
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-black text-slate-700 uppercase tracking-wide mb-1.5">
                     Phân Hệ / Module <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
+                  <select
                     name="module"
                     required
-                    placeholder="Ví dụ: USER, PRODUCT, CART..."
                     value={formData.module}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-200 text-sm font-black uppercase tracking-wider rounded-xl focus:outline-none focus:border-orange-400 text-slate-800"
-                  />
+                    className="w-full px-3 py-2 border border-gray-200 text-sm font-bold rounded-xl focus:outline-none focus:border-orange-400 text-slate-800 bg-white cursor-pointer"
+                  >
+                    <option value="" disabled hidden>
+                      --- Chọn Phân Hệ ---
+                    </option>
+                    {MODULE_OPTIONS.map((mod) => (
+                      <option key={mod.value} value={mod.value}>
+                        {mod.value}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
