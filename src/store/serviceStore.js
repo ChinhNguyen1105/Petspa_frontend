@@ -129,7 +129,7 @@ export const useServiceStore = create((set, get) => ({
 
       set({
         currentService:
-          res .data|| null,
+          res.data || null,
       });
 
       return res.data;
@@ -221,7 +221,7 @@ export const useServiceStore = create((set, get) => ({
           state.services.map(
             (service) =>
               service.id ===
-              Number(serviceId)
+                Number(serviceId)
                 ? res
                 : service
           ),
@@ -229,7 +229,7 @@ export const useServiceStore = create((set, get) => ({
         currentService:
           state.currentService
             ?.id ===
-          Number(serviceId)
+            Number(serviceId)
             ? res
             : state.currentService,
       }));
@@ -283,7 +283,7 @@ export const useServiceStore = create((set, get) => ({
         currentService:
           state.currentService
             ?.id ===
-          Number(serviceId)
+            Number(serviceId)
             ? null
             : state.currentService,
       }));
@@ -311,4 +311,54 @@ export const useServiceStore = create((set, get) => ({
       });
     }
   },
+
+  // ───────────────── SEARCH & FILTER ─────────────────
+  searchServices: async (keyword, params = {}, options = {}) => {
+    try {
+      set({
+        loading: true,
+        error: null,
+      });
+
+      // Gọi hàm searchServices từ tầng Service layer của bạn
+      const res = await ServiceService.searchServices(keyword, params, options);
+
+      if (res?.success) {
+        set({
+          services: res.data?.result || [],
+          meta: res.data?.meta || {
+            page: 1,
+            pageSize: 10,
+            total: 0,
+            pages: 0,
+          },
+        });
+      } else {
+        set({
+          services: [],
+        });
+      }
+
+      return res;
+    } catch (err) {
+      console.error("Search services error:", err);
+
+      const errorMessage = err?.response?.data?.message || err?.message;
+
+      set({
+        error: errorMessage,
+      });
+
+      return {
+        success: false,
+        message: errorMessage,
+      };
+    } finally {
+      set({
+        loading: false,
+      });
+    }
+  },
+
+
 }));

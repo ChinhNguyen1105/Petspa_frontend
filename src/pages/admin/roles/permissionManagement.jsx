@@ -15,7 +15,7 @@ import {
   X,
   Save,
   Info,
-  Filter
+  Filter,
 } from "lucide-react";
 import Loading from "../../../components/common/Loading";
 import ConfirmModal from "../../../components/common/ConfirmModal";
@@ -28,11 +28,19 @@ const PermissionManagement = () => {
   const loading = usePermissionStore((state) => state.loading);
   const submitting = usePermissionStore((state) => state.submitting);
   const error = usePermissionStore((state) => state.error);
-  
-  const fetchPermissions = usePermissionStore((state) => state.fetchPermissions);
-  const createPermission = usePermissionStore((state) => state.createPermission);
-  const updatePermission = usePermissionStore((state) => state.updatePermission);
-  const deletePermission = usePermissionStore((state) => state.deletePermission);
+
+  const fetchPermissions = usePermissionStore(
+    (state) => state.fetchPermissions,
+  );
+  const createPermission = usePermissionStore(
+    (state) => state.createPermission,
+  );
+  const updatePermission = usePermissionStore(
+    (state) => state.updatePermission,
+  );
+  const deletePermission = usePermissionStore(
+    (state) => state.deletePermission,
+  );
 
   const showToast = useCartStore((state) => state.showToast);
 
@@ -40,23 +48,23 @@ const PermissionManagement = () => {
   const [searchKeyword, setSearchKeyword] = useState("");
   const [selectedModule, setSelectedModule] = useState(""); // Lưu trạng thái module cần lọc ở Frontend
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(10); 
+  const [pageSize] = useState(10);
 
   // Trạng thái điều khiển Modal Thêm / Sửa
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-  const [editingPermission, setEditingPermission] = useState(null); 
+  const [editingPermission, setEditingPermission] = useState(null);
   const [formData, setFormData] = useState({
     name: "",
     apiPath: "",
     method: "GET",
-    module: ""
+    module: "",
   });
 
   // Trạng thái cho Modal Xác nhận xóa
   const [confirmDeleteModal, setConfirmDeleteModal] = useState({
     isOpen: false,
     permissionId: null,
-    permissionName: ""
+    permissionName: "",
   });
 
   // ── 2. TỰ ĐỘNG GOM DANH SÁCH MODULES DUY NHẤT TỪ DATA ĐỂ LÀM OPTIONS ──
@@ -74,7 +82,7 @@ const PermissionManagement = () => {
     fetchPermissions({
       page: currentPage,
       pageSize: pageSize,
-      keyword: searchKeyword || undefined
+      keyword: searchKeyword || undefined,
     });
   };
 
@@ -85,11 +93,11 @@ const PermissionManagement = () => {
   // Xử lý tìm kiếm qua form submit
   const handleSearchSubmit = (e) => {
     e.preventDefault();
-    setCurrentPage(1); 
+    setCurrentPage(1);
     fetchPermissions({
       page: 1,
       pageSize: pageSize,
-      keyword: searchKeyword || undefined
+      keyword: searchKeyword || undefined,
     });
   };
 
@@ -97,7 +105,8 @@ const PermissionManagement = () => {
   const filteredPermissions = useMemo(() => {
     if (!selectedModule) return permissions;
     return permissions.filter(
-      (item) => item.module?.trim().toUpperCase() === selectedModule.toUpperCase()
+      (item) =>
+        item.module?.trim().toUpperCase() === selectedModule.toUpperCase(),
     );
   }, [permissions, selectedModule]);
 
@@ -120,7 +129,7 @@ const PermissionManagement = () => {
       name: permission.name || "",
       apiPath: permission.apiPath || "",
       method: permission.method || "GET",
-      module: permission.module || ""
+      module: permission.module || "",
     });
     setIsFormModalOpen(true);
   };
@@ -141,7 +150,7 @@ const PermissionManagement = () => {
     if (editingPermission) {
       res = await updatePermission({
         id: editingPermission.id,
-        ...formData
+        ...formData,
       });
     } else {
       res = await createPermission(formData);
@@ -150,10 +159,10 @@ const PermissionManagement = () => {
     if (res && res.success) {
       showToast(
         `${editingPermission ? "Cập nhật" : "Thêm mới"} quyền [${formData.name}] thành công!`,
-        "success"
+        "success",
       );
       setIsFormModalOpen(false);
-      loadData(); 
+      loadData();
     } else {
       showToast(res.message || "Đã xảy ra lỗi, vui lòng thử lại.", "error");
     }
@@ -164,15 +173,19 @@ const PermissionManagement = () => {
     setConfirmDeleteModal({
       isOpen: true,
       permissionId: permission.id,
-      permissionName: permission.name
+      permissionName: permission.name,
     });
   };
 
   const executeDeletePermission = async () => {
     const { permissionId, permissionName } = confirmDeleteModal;
     const res = await deletePermission(permissionId);
-    
-    setConfirmDeleteModal({ isOpen: false, permissionId: null, permissionName: "" });
+
+    setConfirmDeleteModal({
+      isOpen: false,
+      permissionId: null,
+      permissionName: "",
+    });
 
     if (res && res.success) {
       showToast(`Xóa quyền [${permissionName}] thành công!`, "success");
@@ -188,17 +201,25 @@ const PermissionManagement = () => {
 
   const getMethodBadgeClass = (method) => {
     switch (method) {
-      case "GET": return "bg-purple-50 text-purple-600 border-purple-100";
-      case "POST": return "bg-teal-50 text-teal-600 border-teal-100";
-      case "PUT": return "bg-amber-50 text-amber-600 border-amber-100";
-      case "DELETE": return "bg-rose-50 text-rose-600 border-rose-100";
-      default: return "bg-gray-50 text-gray-600 border-gray-100";
+      case "GET":
+        return "bg-purple-50 text-purple-600 border-purple-100";
+      case "POST":
+        return "bg-teal-50 text-teal-600 border-teal-100";
+      case "PUT":
+        return "bg-amber-50 text-amber-600 border-amber-100";
+      case "DELETE":
+        return "bg-rose-50 text-rose-600 border-rose-100";
+      case "PATCH":
+        return "bg-amber-50 text-amber-600 border-amber-100";
+      case "OPTIONS":
+        return "bg-amber-50 text-amber-600 border-amber-100";
+      default:
+        return "bg-gray-50 text-gray-600 border-gray-100";
     }
   };
 
   return (
     <div className="p-6 space-y-6 bg-gray-50 min-h-screen">
-      
       {/* BREADCRUMB & HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -225,9 +246,11 @@ const PermissionManagement = () => {
       {/* THANH TÌM KIẾM & BỘ LỌC ĐÃ ĐƯỢC NÂNG CẤP THÊM SELECT */}
       <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row gap-3 justify-between items-center">
         <div className="w-full md:w-auto flex flex-col sm:flex-row items-center gap-3 flex-1">
-          
           {/* Nhập text tìm kiếm */}
-          <form onSubmit={handleSearchSubmit} className="w-full sm:w-80 relative">
+          <form
+            onSubmit={handleSearchSubmit}
+            className="w-full sm:w-80 relative"
+          >
             <input
               type="text"
               placeholder="Tìm theo tên quyền, API path..."
@@ -235,7 +258,10 @@ const PermissionManagement = () => {
               onChange={(e) => setSearchKeyword(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 text-sm rounded-xl focus:outline-none focus:border-orange-400 focus:bg-white transition-all font-medium text-slate-700"
             />
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search
+              size={16}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+            />
           </form>
 
           {/* Select chọn phân hệ (Module) */}
@@ -252,9 +278,11 @@ const PermissionManagement = () => {
                 </option>
               ))}
             </select>
-            <Filter size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <Filter
+              size={14}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+            />
           </div>
-          
         </div>
 
         <button
@@ -287,7 +315,9 @@ const PermissionManagement = () => {
         ) : filteredPermissions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-400 font-medium space-y-2">
             <Layers size={40} className="text-gray-300" />
-            <span>Không tìm thấy tài nguyên quyền hạn nào khớp với bộ lọc.</span>
+            <span>
+              Không tìm thấy tài nguyên quyền hạn nào khớp với bộ lọc.
+            </span>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -304,10 +334,17 @@ const PermissionManagement = () => {
               </thead>
               <tbody className="divide-y divide-gray-50 text-sm">
                 {filteredPermissions.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group">
-                    <td className="py-4 px-5 font-mono text-xs text-gray-400 text-center">{item.id}</td>
+                  <tr
+                    key={item.id}
+                    className="hover:bg-gray-50/50 transition-colors group"
+                  >
+                    <td className="py-4 px-5 font-mono text-xs text-gray-400 text-center">
+                      {item.id}
+                    </td>
                     <td className="py-4 px-5">
-                      <p className="font-bold text-slate-800 tracking-tight">{item.name}</p>
+                      <p className="font-bold text-slate-800 tracking-tight">
+                        {item.name}
+                      </p>
                     </td>
                     <td className="py-4 px-5">
                       <span className="text-xs font-extrabold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md uppercase tracking-wide">
@@ -315,7 +352,9 @@ const PermissionManagement = () => {
                       </span>
                     </td>
                     <td className="py-4 px-5">
-                      <span className={`text-[10px] font-black px-2 py-0.5 rounded border tracking-widest ${getMethodBadgeClass(item.method)}`}>
+                      <span
+                        className={`text-[10px] font-black px-2 py-0.5 rounded border tracking-widest ${getMethodBadgeClass(item.method)}`}
+                      >
                         {item.method}
                       </span>
                     </td>
@@ -351,7 +390,11 @@ const PermissionManagement = () => {
         {meta && meta.pages > 1 && (
           <div className="bg-gray-50/40 px-5 py-5 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
             <span className="text-xs font-bold text-gray-400 order-2 sm:order-1">
-              Hiển thị <span className="text-slate-700">{filteredPermissions.length}</span> / {meta.total} bản ghi dữ liệu.
+              Hiển thị{" "}
+              <span className="text-slate-700">
+                {filteredPermissions.length}
+              </span>{" "}
+              / {meta.total} bản ghi dữ liệu.
             </span>
             <div className="order-1 sm:order-2">
               <Pagination
@@ -371,9 +414,14 @@ const PermissionManagement = () => {
             <div className="px-5 py-4 bg-gray-50/80 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-2 font-black text-slate-800 text-base uppercase tracking-wide">
                 <KeyRound size={18} className="text-orange-500" />
-                {editingPermission ? "Cập nhật thông tin quyền" : "Thêm mới quyền hệ thống"}
+                {editingPermission
+                  ? "Cập nhật thông tin quyền"
+                  : "Thêm mới quyền hệ thống"}
               </div>
-              <button onClick={() => setIsFormModalOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+              <button
+                onClick={() => setIsFormModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
                 <X size={18} />
               </button>
             </div>
@@ -409,6 +457,8 @@ const PermissionManagement = () => {
                     <option value="POST">POST</option>
                     <option value="PUT">PUT</option>
                     <option value="DELETE">DELETE</option>
+                    <option value="PATCH">PATCH</option>
+                    <option value="OPTIONS">OPTIONS</option>
                   </select>
                 </div>
 
@@ -445,7 +495,10 @@ const PermissionManagement = () => {
 
               <div className="p-3 bg-blue-50/50 border border-blue-100/60 rounded-xl flex items-start gap-2 text-xs text-blue-600 font-medium leading-relaxed">
                 <Info size={14} className="shrink-0 mt-0.5" />
-                <span>API Endpoint và Method sẽ được Interceptor/Filter dưới Backend quét kiểm tra khớp từng request để phân quyền bảo mật.</span>
+                <span>
+                  API Endpoint và Method sẽ được Interceptor/Filter dưới Backend
+                  quét kiểm tra khớp từng request để phân quyền bảo mật.
+                </span>
               </div>
 
               <div className="pt-3 border-t border-gray-100 flex justify-end gap-2">
@@ -473,13 +526,18 @@ const PermissionManagement = () => {
       {/* MODAL XÁC NHẬN XÓA */}
       <ConfirmModal
         isOpen={confirmDeleteModal.isOpen}
-        onClose={() => setConfirmDeleteModal({ isOpen: false, permissionId: null, permissionName: "" })}
+        onClose={() =>
+          setConfirmDeleteModal({
+            isOpen: false,
+            permissionId: null,
+            permissionName: "",
+          })
+        }
         onConfirm={executeDeletePermission}
         title="Xác nhận gỡ bỏ quyền lợi"
         message={`Bạn có chắc chắn muốn xóa vĩnh viễn quyền hạn "${confirmDeleteModal.permissionName}" khỏi hệ thống? Hành động này có thể làm ảnh hưởng đến các cấu hình Vai trò đang chứa quyền này.`}
         type="danger"
       />
-
     </div>
   );
 };

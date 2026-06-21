@@ -2,13 +2,13 @@ import React, { useState, useEffect } from "react";
 import {
   Search,
   Edit2,
-  Trash2,
   ChevronRight,
   Eye,
   User,
   MapPin,
   Package,
-  Plus,
+  Phone,
+  Hash,
 } from "lucide-react";
 import Loading from "../../../components/common/Loading";
 import { formatPrice } from "../../../utils/formatPrice";
@@ -37,14 +37,21 @@ const OrderManagement = () => {
   const fetchOrders = useOrderStore((state) => state.fetchOrders);
   const createOrder = useOrderStore((state) => state.createOrder);
   const updateOrderStatus = useOrderStore((state) => state.updateOrderStatus);
-  const cancelOrder = useOrderStore((state) => state.cancelOrder);
-
   const setStoreState = useOrderStore.setState;
 
-  // ─── LOCAL UI STATE ────────────────────────────────────────────────────────
-  const [searchTerm, setSearchTerm] = useState("");
+  // ─── LOCAL UI STATE FOR FILTERS ──────────────────────────────────────────
+  const [searchId, setSearchId] = useState("");
+  const [searchName, setSearchName] = useState("");
+  const [searchPhone, setSearchPhone] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(1);
+
+  // State trì hoãn (Debounce) nhằm tối ưu tần suất gọi API
+  const [debouncedFilters, setDebouncedFilters] = useState({
+    id: "",
+    name: "",
+    phone: "",
+  });
 
   // Điều khiển Main Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -62,52 +69,64 @@ const OrderManagement = () => {
 
   const showToast = useCartStore((state) => state.showToast);
 
-  // ─── FETCH DỮ LIỆU TỪ STORE ĐẦU KỲ VÀ KHI ĐỔI TRANG ────────────────────────
+  // ─── MECHANISM: DEBOUNCE FILTERS TERM ─────────────────────────────────────
   useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedFilters({
+        id: searchId.trim(),
+        name: searchName.trim(),
+        phone: searchPhone.trim(),
+      });
+    }, 500);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [searchId, searchName, searchPhone]);
+
+  // ─── FETCH DỮ LIỆU TỰ ĐỘNG TÍCH HỢP PARAMS THEO SPECIFICATION API ──────────
+  useEffect(() => {
+    // Mảng chứa các điều kiện bắt buộc mặc định (Toán tử AND)
+    const filterConditions = ["orderType:PRODUCT"];
+
+    // 1. Lọc theo trạng thái đơn hàng (nếu có)
+    if (selectedStatus !== "ALL") {
+      filterConditions.push(`status:${selectedStatus}`);
+    }
+
+    // 2. Lọc theo Mã đơn hàng chính xác (ID)
+    if (debouncedFilters.id) {
+      if (!isNaN(debouncedFilters.id)) {
+        filterConditions.push(`id:${debouncedFilters.id}`);
+      }
+    }
+
+    // 3. Lọc theo Tên khách hàng (Chứa ký tự - LIKE)
+    if (debouncedFilters.name) {
+      filterConditions.push(`shippingName~*${debouncedFilters.name}*`);
+    }
+
+    // 4. Lọc theo Số điện thoại khách hàng (Chứa ký tự - LIKE)
+    if (debouncedFilters.phone) {
+      filterConditions.push(`shippingPhone~*${debouncedFilters.phone}*`);
+    }
+
+    // Gom các điều kiện lại phân tách bằng dấu phẩy ',' (Đúng chuẩn logic AND)
+    const filterParam = filterConditions.join(",");
+
+    // Tiến hành gọi API thông qua Zustand store
     fetchOrders({
       page: currentPage,
-      search: searchTerm.trim(),
-      // Loại bỏ việc gửi status lên API nếu bạn muốn thực hiện lọc thuần hoàn toàn ở Frontend
+      filter: filterParam,
     });
-  }, [currentPage, searchTerm, fetchOrders]);
+  }, [currentPage, debouncedFilters, selectedStatus, fetchOrders]);
 
-  // Reset về trang 1 khi từ khóa tìm kiếm hoặc bộ lọc thay đổi để tránh lệch layout trang rỗng
+  // Reset về trang 1 khi bất kỳ bộ lọc nào thay đổi
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedStatus]);
-
-  // ─── LOGIC LỌC DỮ LIỆU TRÊN FRONTEND ────────────────────────────────────────
-  const filteredOrders = orders.filter((order) => {
-    // 1. Lọc theo trạng thái của bộ Dropdown
-    if (selectedStatus !== "ALL" && order.status !== selectedStatus) {
-      return false;
-    }
-
-    // 2. Lọc thêm theo từ khóa search (mã đơn, tên, số điện thoại hoặc địa chỉ)
-    if (searchTerm.trim() !== "") {
-      const searchLower = searchTerm.toLowerCase();
-      const matchId = order.id?.toString().toLowerCase().includes(searchLower);
-      const matchName = order.shippingName?.toLowerCase().includes(searchLower);
-      const matchPhone = order.shippingPhone
-        ?.toLowerCase()
-        .includes(searchLower);
-      const matchAddress = order.shippingAddressFull
-        ?.toLowerCase()
-        .includes(searchLower);
-
-      return matchId || matchName || matchPhone || matchAddress;
-    }
-
-    return true;
-  });
+  }, [debouncedFilters, selectedStatus]);
 
   // ─── MODAL HANDLERS ────────────────────────────────────────────────────────
-  const handleOpenCreateModal = () => {
-    setModalType("CREATE");
-    setSelectedOrder(null);
-    setIsModalOpen(true);
-  };
-
   const handleOpenEditModal = (order) => {
     setModalType("EDIT");
     setSelectedOrder(order);
@@ -219,31 +238,6 @@ const OrderManagement = () => {
     });
   };
 
-  const handleConfirmDelete = (orderId) => {
-    setConfirmModal({
-      isOpen: true,
-      type: "CONFIRM_DELETE",
-      title: "Hủy đơn hàng vĩnh viễn",
-      message: `Hành động này sẽ thực hiện hủy mã đơn [#${orderId}] trên hệ thống.`,
-      pendingData: { id: orderId },
-    });
-  };
-
-  const executeDeleteOrder = async () => {
-    const { id } = confirmModal.pendingData;
-    try {
-      const res = await cancelOrder(id);
-      if (res?.success !== false) {
-        showToast(`Hủy thành công đơn hàng #${id}`, "success");
-      } else {
-        showToast(res?.message || "Xảy ra lỗi khi thực thi hủy đơn.", "error");
-      }
-      closeConfirmModal();
-    } catch (err) {
-      showToast("Xảy ra lỗi khi thực thi xóa.", "error");
-    }
-  };
-
   const handleConfirmAction = () => {
     switch (confirmModal.type) {
       case "CANCEL_FORM":
@@ -253,9 +247,6 @@ const OrderManagement = () => {
       case "CONFIRM_SAVE_FORM":
       case "CONFIRM_UPDATE":
         executeSaveOrder();
-        break;
-      case "CONFIRM_DELETE":
-        executeDeleteOrder();
         break;
       default:
         closeConfirmModal();
@@ -295,37 +286,66 @@ const OrderManagement = () => {
             QUẢN LÝ ĐƠN HÀNG
           </h1>
         </div>
-        {/* <button onClick={handleOpenCreateModal} className="flex items-center justify-center gap-2 px-5 py-3 bg-orange-500 text-white font-bold rounded-2xl shadow-md hover:bg-opacity-90 active:scale-95 transition-all">
-          <Plus size={18} /> Tạo đơn hàng mới
-        </button> */}
       </div>
 
-      {/* Filter bar */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4 items-center justify-between">
-        <div className="relative w-full md:w-96">
+      {/* Grid Filter Bar - Chia thành các input chức năng riêng biệt */}
+      <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-center">
+        {/* Bộ lọc 1: Mã đơn hàng */}
+        <div className="relative w-full">
           <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-400">
-            <Search size={18} />
+            <Hash size={16} />
           </span>
           <input
             type="text"
-            placeholder="Tìm theo mã đơn, khách hàng, địa chỉ..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 text-gray-700"
+            placeholder="Mã đơn hàng (Số)..."
+            value={searchId}
+            onChange={(e) => setSearchId(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 text-gray-700"
           />
         </div>
-        {/* Bộ select đồng bộ trạng thái */}
-        <select
-          value={selectedStatus}
-          onChange={(e) => setSelectedStatus(e.target.value)}
-          className="w-full sm:w-56 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 focus:outline-none"
-        >
-          {STATUS_FILTERS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+
+        {/* Bộ lọc 2: Tên khách hàng */}
+        <div className="relative w-full">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-400">
+            <User size={16} />
+          </span>
+          <input
+            type="text"
+            placeholder="Tên khách hàng..."
+            value={searchName}
+            onChange={(e) => setSearchName(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 text-gray-700"
+          />
+        </div>
+
+        {/* Bộ lọc 3: Số điện thoại */}
+        <div className="relative w-full">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-400">
+            <Phone size={16} />
+          </span>
+          <input
+            type="text"
+            placeholder="Số điện thoại..."
+            value={searchPhone}
+            onChange={(e) => setSearchPhone(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 text-gray-700"
+          />
+        </div>
+
+        {/* Bộ lọc 4: Trạng thái đơn hàng */}
+        <div className="w-full lg:col-span-2">
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+            className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 focus:outline-none focus:border-orange-500"
+          >
+            {STATUS_FILTERS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Table list */}
@@ -343,8 +363,7 @@ const OrderManagement = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {/* Duyệt qua mảng dữ liệu đã lọc filteredOrders thay vì mảng orders gốc */}
-              {filteredOrders.length === 0 ? (
+              {orders.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="p-12 text-center text-gray-400">
                     <Package size={36} className="mx-auto mb-2 text-gray-300" />
@@ -352,7 +371,7 @@ const OrderManagement = () => {
                   </td>
                 </tr>
               ) : (
-                filteredOrders.map((order) => {
+                orders.map((order) => {
                   const statusInfo = STATUS_CONFIG[order.status];
                   const paymentInfo =
                     PAYMENT_STATUS_CONFIG[order.paymentStatus];
@@ -379,6 +398,12 @@ const OrderManagement = () => {
                           <MapPin size={12} className="shrink-0" />{" "}
                           {order.shippingAddressFull}
                         </div>
+                        {order.shippingPhone && (
+                          <div className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                            <Phone size={12} className="shrink-0" />{" "}
+                            {order.shippingPhone}
+                          </div>
+                        )}
                       </td>
                       <td className="p-4 max-w-sm">
                         <div className="space-y-0.5">
