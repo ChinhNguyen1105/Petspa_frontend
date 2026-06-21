@@ -127,26 +127,6 @@ export const usePetStore = create((set, get) => ({
     }
   },
 
-  /*
-  |--------------------------------------------------------------------------
-  | GET SPECIES
-  |--------------------------------------------------------------------------
-  */
-  fetchSpecies: async (options = {}) => {
-    try {
-      const res = await PetService.getSpecies(options);
-
-      set({
-        species: res?.data || [],
-      });
-
-      return res;
-    } catch (err) {
-      set({
-        error: err?.message || "Fetch species failed",
-      });
-    }
-  },
 
   /*
   |--------------------------------------------------------------------------

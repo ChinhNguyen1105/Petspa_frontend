@@ -29,90 +29,28 @@ const shouldUseApi = (options = {}) =>
 | GET INVENTORY
 |--------------------------------------------------------------------------
 */
+/* Chuyền params vào */
 const getInventory = async (
   params = {},
   options = {}
 ) => {
   console.log("params", params);
   if (shouldUseApi(options)) {
-    const productId =
-      params.productId || params.id;
+    // Nếu bạn cần xử lý field trùng lặp như productId/id trước khi gửi lên API
+    const queryParams = { ...params };
+    if (queryParams.id && !queryParams.productId) {
+      queryParams.productId = queryParams.id;
+    }
 
+    // Truyền params vào object config (đối số thứ 2 của api.get)
     const resp = await api.get(
-      URL_CONSTANT.Inventory.GET_INVENTORY_BY_PRODUCT_ID.replace(
-        "{id}",
-        productId
-      )
+      URL_CONSTANT.Inventory.GET_INVENTORY_LIST,
+      { params: queryParams } // <-- Thêm dòng này
     );
     console.log("getInventory", resp);
 
     return resp.data;
   }
-
-  await delay(500);
-
-  let result = [...inventoryMock.result];
-
-  const {
-    keyword,
-    productId,
-    minQuantity,
-    maxQuantity,
-  } = params;
-
-  // SEARCH
-  if (keyword) {
-    result = result.filter((item) =>
-      item.productName
-        ?.toLowerCase()
-        .includes(
-          keyword.toLowerCase()
-        )
-    );
-  }
-
-  // FILTER PRODUCT
-  if (productId) {
-    result = result.filter(
-      (item) =>
-        String(item.productId) ===
-        String(productId)
-    );
-  }
-
-  // FILTER MIN QUANTITY
-  if (minQuantity) {
-    result = result.filter(
-      (item) =>
-        item.quantity >=
-        Number(minQuantity)
-    );
-  }
-
-  // FILTER MAX QUANTITY
-  if (maxQuantity) {
-    result = result.filter(
-      (item) =>
-        item.quantity <=
-        Number(maxQuantity)
-    );
-  }
-
-  return {
-    success: true,
-    message:
-      inventoryMock.message ||
-      "Get inventory successfully",
-
-    data: {
-      meta: {
-        ...(inventoryMock.meta ||
-          {}),
-        total: result.length,
-      },
-      result,
-    },
-  };
 };
 
 /*

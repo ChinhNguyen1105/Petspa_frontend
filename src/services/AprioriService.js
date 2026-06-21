@@ -20,11 +20,14 @@ const getRecommendServices = async (itemIds = [], options = {}) => {
     console.log("REQUEST itemIds:", itemIds);
 
   if (shouldUseApi(options)) {
-    const resp = await api.post(
-      URL_CONSTANT.Product.GET_RECOMMENDATIONS,
-      { itemIds }
-    );
-
+  const resp = await api.post(
+  URL_CONSTANT.PetService.GET_RECOMMENDATIONS,
+  {
+    params: {
+      itemIds
+    }
+  }
+);
     console.log("PRODUCT RECOMMEND RESPONSE:", resp);
 
     return unwrap(resp);

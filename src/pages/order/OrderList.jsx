@@ -34,9 +34,10 @@ const OrderList = () => {
       const res = await cancelOrder(orderId);
 
       // 🌟 ĐỒNG BỘ LOGIC PHẢN HỒI: Service trả về trực tiếp cục `res.data` chứa trường `success`
-      if (res && res.success) {
+      if (res.status === "SUCCESS") {
         if (showToast) {
           showToast("Hủy đơn hàng thành công!", "success");
+          fetchMyOrders({ page: 0, size: 20, status: "PENDING" });
         } else {
           alert("Hủy đơn hàng thành công!");
         }

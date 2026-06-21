@@ -1,64 +1,71 @@
 import { create } from "zustand";
 import ProductImageService from "../services/ProductImageService";
 
-export const useProductImageStore =
-  create((set, get) => ({
-    images: [],
-    loading: false,
-    error: null,
+export const useProductImageStore = create((set, get) => ({
+  imagesByProductId: {},
+  loading: false,
+  error: null,
 
-    /*
-    |--------------------------------------------------------------------------
-    | FETCH IMAGES
-    |--------------------------------------------------------------------------
-    */
-    fetchImages: async (
-      productId
-    ) => {
-      try {
-        set({
-          loading: true,
-          error: null,
-        });
+  /*
+  |--------------------------------------------------------------------------
+  | FETCH IMAGES
+  |--------------------------------------------------------------------------
+  */
+  fetchImages: async (productId) => {
+    try {
+      set({
+        loading: true,
+        error: null,
+      });
 
-        const res =
-          await ProductImageService.getProductImages(
-            productId
-          );
-
-        console.log(
-          "response img",
-          res
+      const res =
+        await ProductImageService.getProductImages(
+          productId
         );
 
-        set({
-          images:
-            res?.data || [],
-        });
+      const imageList =
+        res?.data || [];
 
-        return res;
-      } catch (err) {
-        console.error(
-          "Fetch images error:",
-          err
-        );
+      console.log(
+        "response img",
+        imageList
+      );
 
-        set({
-          images: [],
-          error:
-            err?.response?.data
-              ?.message ||
-            err?.message ||
-            "Fetch images failed",
-        });
+      set((state) => ({
+        imagesByProductId: {
+          ...state.imagesByProductId,
+          [productId]: imageList,
+        },
+      }));
 
-        throw err;
-      } finally {
-        set({
-          loading: false,
-        });
-      }
-    },
+      return imageList;
+    } catch (err) {
+      console.error(
+        "Fetch images error:",
+        err
+      );
+
+      set({
+        error:
+          err?.response?.data?.message ||
+          err?.message ||
+          "Fetch images failed",
+      });
+
+      throw err;
+    } finally {
+      set({
+        loading: false,
+      });
+    }
+  },
+
+  /*
+  |--------------------------------------------------------------------------
+  | GET IMAGES OF PRODUCT
+  |--------------------------------------------------------------------------
+  */
+  getImagesByProductId: (productId) => get().imagesByProductId[productId] || [],
 
     /*
     |--------------------------------------------------------------------------

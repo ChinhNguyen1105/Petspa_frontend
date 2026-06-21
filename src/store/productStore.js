@@ -184,21 +184,20 @@ export const useProductStore = create((set, get) => ({
 
       // backend yêu cầu quantity
       quantity: Number(
-        data.stockQuantity ??
-        data.stock_quantity ??
-        0
+        data.quantity
       ),
     };
 
-    console.log(
-      "request backend =",
-      request
-    );
+    
 
     const res =
       await ProductService.createProduct(
         request
       );
+    console.log(
+      "request backend = ",
+      res
+    );
 
     if (
       res?.success &&

@@ -77,6 +77,7 @@ export const URL_CONSTANT = {
     ADJUST_PRODUCT: '/inventories/adjust',
     GET_INVENTORY_BY_PRODUCT_ID: '/inventories/{id}',
     GET_INVENTORY_TRANSACTION_HISTORY: '/inventories/transaction-history',
+    GET_INVENTORY_LIST: "/inventories",
   },
 
   Cart: {

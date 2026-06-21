@@ -18,7 +18,7 @@ const PaymentModal = ({ isOpen, onClose, orderData, onPaymentSuccess }) => {
 
   const pollingRef = useRef(null);
   const amount = orderData?.amount || orderData?.totalAmount || 0;
-  const orderId = orderData?.id;
+  const orderId = orderData?.id; 
 
   // Cấu hình URL sinh mã QR động dựa trên cổng VNPAY link
   const qrImageUrl = vnpayUrl
