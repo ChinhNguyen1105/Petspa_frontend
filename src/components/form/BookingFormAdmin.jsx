@@ -1,724 +1,406 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import {
-  Calendar,
-  Clock,
-  AlertCircle,
-  Plus,
-  X,
-  Notebook,
-  CheckCircle2,
-  Mail,
-} from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { useProductStore } from "../../store/productStore";
+import { useCategoryStore } from "../../store/categoryStore";
+import { useProductImageStore } from "../../store/productImageStore";
 
-import validateBookingForm from "../../utils/bookingValidator";
+const ProductFormAdmin = ({ initialData, onSubmit, onClose }) => {
+  const isEdit = !!initialData;
+  const productId = initialData?.id;
 
-import { useBookingStore } from "../../store/bookingStore";
-import { useServiceStore } from "../../store/serviceStore";
-import { useUserStore } from "../../store/userStore";
-import { usePetStore } from "../../store/petStore";
-import { SLOT_TIMES } from "../../constants";
-import { BOOKING_CONFIG } from "../../constants";
+  const { loading: loadingProduct } = useProductStore();
+  const { categories, fetchCategories } = useCategoryStore();
 
-const toMinutes = (timeStr) => {
-  if (!timeStr) return null;
-  const [h, m] = timeStr.split(":").map(Number);
-  return h * 60 + m;
-};
+  // 1. Đồng bộ Store: Lấy các phương thức và object quản lý ảnh dựa trên ID sản phẩm
+  const {
+    imagesByProductId,
+    loading: loadingImages,
+    fetchImages,
+    uploadImages,
+    deleteImage,
+    setMainImage,
+    clearImages,
+  } = useProductImageStore();
 
-const isOverlap = (aStart, aEnd, bStart, bEnd) =>
-  aStart < bEnd && bStart < aEnd;
+  // Trích xuất mảng ảnh thực tế của sản phẩm hiện tại, bọc giáp an toàn tuyệt đối bằng fallback || []
+  const productImages = productId ? imagesByProductId?.[productId] || [] : [];
 
-const BookingFormAdmin = ({ initialData, onSubmit, onClose }) => {
-  console.log("initial data thực tế:", initialData);
-
-  // ─── STORE DATA ──────────────────────────────────────────────────────────────
-  const { services, fetchServices } = useServiceStore();
-  const { users, fetchUsers } = useUserStore();
-  const { unavailableSlots, fetchUnavailableSlots, updateBookingStatus } =
-    useBookingStore();
-  const { pets, fetchPetsByUser, loading: loadingPets } = usePetStore();
-
-  // ─── LOCAL UI STATE ──────────────────────────────────────────────────────────
-  const [slots, setSlots] = useState([]);
-  const [loadingSlots, setLoadingSlots] = useState(false);
-  const [formErrors, setFormErrors] = useState({});
-  const [userError, setUserError] = useState("");
-
-  const needsInit = !services?.length || !users?.length;
-  const [loading, setLoading] = useState(needsInit);
-
-  // ─── FORM STATE ───────────────────────────────────────────────────────────────
+  // State quản lý dữ liệu form bám sát theo Class ReqCreateProduct DTO
   const [formData, setFormData] = useState({
-    userEmail: "", // Sẽ được đồng bộ thông minh qua useEffect bên dưới
-    petId: initialData?.petId || initialData?.pet?.id || "",
-    date: initialData?.bookingDate || "",
-    time: initialData?.startTime || "",
-    note: initialData?.note || "",
-    serviceIds: [], // Sẽ được bóc tách an toàn từ các cấu trúc mảng khác nhau
+    name: "",
+    description: "",
+    price: "",
+    categoryId: "",
+    quantity: "",
   });
 
-  // ─── ĐỒNG BỘ INITIAL DATA & FILTER TỪ STORE ────────────────────────────────────
+  // Dùng ref để clear input file dễ dàng sau khi upload thành công
+  const fileInputRef = useRef(null);
+
+  // Kích hoạt fetch các danh mục có loại là PRODUCT
   useEffect(() => {
-    // 1. Tìm Email dựa trên userId thu được từ initialData bằng cách tra cứu mảng users từ Store
-    let targetEmail = initialData?.user?.email || "";
-    if (!targetEmail && initialData?.userId && users.length > 0) {
-      const userFound = users.find(
-        (u) => String(u.id) === String(initialData.userId),
-      );
-      if (userFound) targetEmail = userFound.email;
+    if (fetchCategories) {
+      fetchCategories({ type: "PRODUCT" });
     }
+  }, [fetchCategories]);
 
-    // 2. Trích xuất danh sách Service IDs an toàn bất kể cấu trúc DB phẳng hay lồng nhau
-    const rawServices =
-      initialData?.bookingDetails ||
-      initialData?.services ||
-      initialData?.items ||
-      [];
-    const extractedServiceIds = rawServices.map((s) =>
-      (s.serviceId || s.id).toString(),
-    );
-
-    setFormData({
-      userEmail: targetEmail,
-      petId: initialData?.petId || initialData?.pet?.id || "",
-      date: initialData?.bookingDate || "",
-      time: initialData?.startTime || "",
-      note: initialData?.note || "",
-      serviceIds: extractedServiceIds,
-    });
-  }, [initialData, users]); // Chạy lại khi initialData cập nhật hoặc khi danh sách users đã fetch xong
-
-  // ─── MATCHED USER ─────────────────────────────────────────────────────────────
-  const matchedUser = useMemo(() => {
-    const email = formData.userEmail?.trim().toLowerCase();
-    if (!email) return undefined;
-    return users.find((u) => u.email?.toLowerCase() === email);
-  }, [users, formData.userEmail]);
-
-  // ─── DERIVED ─────────────────────────────────────────────────────────────────
-  const selectedServices = useMemo(
-    () => services.filter((s) => formData.serviceIds.includes(s.id.toString())),
-    [services, formData.serviceIds],
-  );
-
-  const totalDuration = useMemo(
-    () =>
-      selectedServices.reduce((sum, s) => sum + (s.durationMin || 0), 0) || 30,
-    [selectedServices],
-  );
-
-  const totalAmount = useMemo(
-    () =>
-      selectedServices.reduce(
-        (sum, s) => sum + (s.basePrice || s.price || 0),
-        0,
-      ),
-    [selectedServices],
-  );
-
-  const slotsNeeded = Math.ceil(totalDuration / 30);
-
-  // ─── FETCH METADATA: chỉ fetch khi thực sự cần ───────────────────────────────
+  // Đổ dữ liệu ban đầu hoặc Fetch ảnh từ server về nếu là Mode Edit
   useEffect(() => {
-    if (!needsInit) return;
-
-    let cancelled = false;
-    const init = async () => {
-      try {
-        const tasks = [];
-        if (!services?.length) tasks.push(fetchServices());
-        if (!users?.length) tasks.push(fetchUsers());
-        await Promise.all(tasks);
-      } catch (err) {
-        console.error("Error initializing form:", err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    init();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // ─── VALIDATE USER EMAIL ─────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!formData.userEmail) {
-      setUserError("");
-      return;
-    }
-    setUserError(matchedUser ? "" : "Không tìm thấy người dùng với email này.");
-  }, [formData.userEmail, matchedUser]);
-
-  const filteredPets = useMemo(() => {
-    if (!matchedUser?.id) return [];
-    return pets.filter((pet) => String(pet.ownerId) === String(matchedUser.id));
-  }, [pets, matchedUser?.id]);
-
-  // ─── AUTO FETCH PETS KHI USER THAY ĐỔI ──────────────────────────────────────
-  useEffect(() => {
-    if (!matchedUser) return;
-
-    // Tìm kiếm email cũ tương ứng để tránh bị reset pet oan khi vừa gieo dữ liệu sửa vào form
-    let initialEmail = initialData?.user?.email;
-    if (!initialEmail && initialData?.userId) {
-      initialEmail = users.find(
-        (u) => String(u.id) === String(initialData.userId),
-      )?.email;
-    }
-
-    if (
-      !initialData ||
-      formData.userEmail?.toLowerCase() !== initialEmail?.toLowerCase()
-    ) {
-      setFormData((prev) => ({ ...prev, petId: prev.petId ? prev.petId : "" }));
-    }
-    fetchPetsByUser(matchedUser.id);
-  }, [matchedUser, initialData, fetchPetsByUser, users]);
-
-  // ─── FETCH SLOTS KHI NGÀY THAY ĐỔI ──────────────────────────────────────────
-  useEffect(() => {
-    if (!formData.date) {
-      setSlots(
-        SLOT_TIMES.map((slot) => ({
-          start_time: slot.startTime,
-          end_time: slot.endTime,
-          available: true,
-          reason: null,
-        })),
-      );
-      return;
-    }
-
-    let cancelled = false;
-    const loadSlots = async () => {
-      setLoadingSlots(true);
-      try {
-        const res = await fetchUnavailableSlots({ date: formData.date });
-        if (cancelled) return;
-        const unavailable = res?.data || [];
-
-        const computedSlots = SLOT_TIMES.map((slotTime) => {
-          const slotStart = toMinutes(slotTime.startTime);
-          const slotEnd = toMinutes(slotTime.endTime);
-          const isBooked = unavailable.some((u) => {
-            // Loại trừ chính lịch hẹn hiện tại đang sửa đổi ra để không bị tính là bị trùng lịch (Overlap)
-            if (
-              initialData &&
-              String(u.bookingId || u.id) === String(initialData.id)
-            ) {
-              return false;
-            }
-            const uStart = toMinutes(u.startTime);
-            const uEnd = toMinutes(u.endTime);
-            return isOverlap(slotStart, slotEnd, uStart, uEnd);
-          });
-          return {
-            start_time: slotTime.startTime,
-            end_time: slotTime.endTime,
-            available: !isBooked,
-            reason: isBooked ? "BOOKED" : null,
-          };
-        });
-
-        setSlots(computedSlots);
-      } catch (err) {
-        if (!cancelled) {
-          console.error("Lỗi lấy danh sách khung giờ trống:", err);
-          setSlots(
-            SLOT_TIMES.map((slot) => ({
-              start_time: slot.startTime,
-              end_time: slot.endTime,
-              available: true,
-              reason: null,
-            })),
-          );
-        }
-      } finally {
-        if (!cancelled) setLoadingSlots(false);
-      }
-    };
-
-    loadSlots();
-    return () => {
-      cancelled = true;
-    };
-  }, [formData.date, fetchUnavailableSlots, initialData]);
-
-  // ─── KIỂM TRA N SLOT LIÊN TIẾP ───────────────────────────────────────────────
-  const checkConsecutiveSlots = useCallback(
-    (startIndex) => {
-      if (startIndex < 0 || startIndex >= slots.length)
-        return { available: false, reason: "INVALID_INDEX" };
-
-      for (let i = 0; i < slotsNeeded; i++) {
-        const slot = slots[startIndex + i];
-        if (!slot) return { available: false, reason: "OVER_WORKING_HOURS" };
-
-        const isOwnCurrentSlot =
-          initialData &&
-          formData.date === initialData.bookingDate &&
-          slot.start_time === initialData.startTime;
-
-        if (!slot.available && !isOwnCurrentSlot) {
-          return {
-            available: false,
-            reason: i === 0 ? slot.reason : "INSUFFICIENT_CONSECUTIVE_SLOTS",
-          };
-        }
-      }
-      return { available: true };
-    },
-    [slots, slotsNeeded, initialData, formData.date],
-  );
-
-  const selectedStartIndex = useMemo(
-    () =>
-      formData.time
-        ? slots.findIndex((s) => s.start_time === formData.time)
-        : -1,
-    [formData.time, slots],
-  );
-
-  const isBlockValid = useMemo(() => {
-    if (selectedStartIndex < 0) return false;
-    return slots
-      .slice(selectedStartIndex, selectedStartIndex + slotsNeeded)
-      .every((s) => {
-        if (!s) return false;
-        const isOwnCurrentSlot =
-          initialData &&
-          formData.date === initialData.bookingDate &&
-          s.start_time === initialData.startTime;
-        return s.available || isOwnCurrentSlot;
+    if (initialData) {
+      setFormData({
+        name: initialData.name || "",
+        description: initialData.description || "",
+        price: initialData.price ?? "",
+        categoryId: initialData.categoryId || initialData.category?.id || "",
+        quantity:
+          initialData.quantity ??
+          initialData.stockQuantity ??
+          initialData.stock_quantity ??
+          "",
       });
-  }, [selectedStartIndex, slotsNeeded, slots, initialData, formData.date]);
 
-  useEffect(() => {
-    if (selectedStartIndex !== -1 && !isBlockValid) {
-      setFormData((prev) => ({ ...prev, time: "" }));
-    }
-  }, [slotsNeeded, slots, selectedStartIndex, isBlockValid]);
-
-  // Auto-select slot khả dụng
-  useEffect(() => {
-    if (
-      !formData.date ||
-      !formData.serviceIds.length ||
-      formData.time ||
-      !slots.length
-    )
-      return;
-
-    for (let i = 0; i < slots.length; i++) {
-      if (checkConsecutiveSlots(i).available) {
-        setFormData((prev) => ({ ...prev, time: slots[i].start_time }));
-        break;
+      if (initialData.id) {
+        fetchImages(initialData.id);
       }
+    } else {
+      setFormData({
+        name: "",
+        description: "",
+        price: "",
+        categoryId: "",
+        quantity: "",
+      });
+      // Tùy chọn xóa dữ liệu ảnh tạm thời khi đóng/mở form tạo mới
+      if (clearImages) clearImages();
     }
-  }, [
-    slots,
-    slotsNeeded,
-    formData.date,
-    formData.serviceIds,
-    formData.time,
-    checkConsecutiveSlots,
-  ]);
+  }, [initialData, fetchImages, clearImages]);
 
-  // ─── HANDLERS ────────────────────────────────────────────────────────────────
-  const handleServiceToggle = (serviceIdStr) => {
-    setFormData((prev) => {
-      const isExist = prev.serviceIds.includes(serviceIdStr);
-      return {
-        ...prev,
-        serviceIds: isExist
-          ? prev.serviceIds.filter((id) => id !== serviceIdStr)
-          : [...prev.serviceIds, serviceIdStr],
-        time: "",
-      };
-    });
-  };
+  // Xử lý upload tập tin hình ảnh (Hỗ trợ chọn nhiều ảnh cùng lúc)
+  const handleFileChange = async (e) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0 || !productId) return;
 
-  const handleSelectSlot = (slot, index) => {
-    if (!checkConsecutiveSlots(index).available) return;
-    setFormData((prev) => ({ ...prev, time: slot.start_time }));
-  };
+    // Ép kiểu FileList thành một Array thực thụ
+    const filesArray = Array.from(fileList);
 
-  // ─── SUBMIT ──────────────────────────────────────────────────────────────────
-  const handleFormSubmit = (e) => {
-    e.preventDefault();
-
-    const errors = validateBookingForm(
-      {
-        serviceIds: formData.serviceIds,
-        date: formData.date,
-        time: formData.time,
-        customerId: matchedUser?.id,
-        petId: formData.petId,
-      },
-      { requireGroomer: false },
-    );
-
-    if (Object.keys(errors).length > 0) {
-      setFormErrors(errors);
+    // Kiểm tra giới hạn số lượng ảnh (Tối đa 6) - Sử dụng optional chaining an toàn
+    if ((productImages?.length || 0) + filesArray.length > 6) {
+      alert(
+        `Hệ thống chỉ hỗ trợ tối đa 6 ảnh minh họa. Hiện tại sản phẩm đã có ${productImages?.length || 0} ảnh.`,
+      );
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
-    setFormErrors({});
 
-    onSubmit({
-      userId: matchedUser?.id,
-      serviceIds: formData.serviceIds.map((id) => Number(id)),
-      bookingDate: formData.date,
-      startTime: formData.time,
-      endTime:
-        slots[selectedStartIndex + slotsNeeded - 1]?.end_time || formData.time,
-      petId: formData.petId ? Number(formData.petId) : null,
-      note: formData.note,
-    });
-  };
-
-  const getReasonBadge = (reason) => {
-    switch (reason) {
-      case "BOOKED":
-        return { label: "Kín lịch", color: "bg-red-100 text-red-500" };
-      case "OUTSIDE_WORKING_HOURS":
-        return { label: "Ngoài giờ", color: "bg-gray-200 text-gray-500" };
-      case "OVER_WORKING_HOURS":
-        return { label: "Cuối ca", color: "bg-gray-200 text-gray-500" };
-      case "INSUFFICIENT_CONSECUTIVE_SLOTS":
-        return { label: "Thiếu ô tiếp", color: "bg-amber-100 text-amber-600" };
-      default:
-        return { label: "Hết chỗ", color: "bg-gray-200 text-gray-500" };
+    try {
+      // Truyền mảng chuẩn (Array) và kèm productId chính xác
+      await uploadImages(productId, filesArray);
+    } catch (err) {
+      alert(
+        "Tải tập tin hình ảnh lên thất bại, vui lòng kiểm tra lại định dạng tệp.",
+      );
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  if (loading) {
-    return (
-      <div className="py-12 text-center text-sm font-semibold text-gray-500 animate-pulse">
-        Đang tải cấu hình biểu mẫu...
-      </div>
-    );
-  }
+  const handleRemoveGalleryImage = async (imageId) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa hình ảnh này không?"))
+      return;
+    try {
+      await deleteImage(imageId);
+      // Tùy chọn reload lại danh sách ảnh từ server sau khi xóa thành công
+      if (productId) fetchImages(productId);
+    } catch (err) {
+      alert("Xóa ảnh thất bại!");
+    }
+  };
+
+  const handleSetMainImage = async (imageId) => {
+    if (!productId) return;
+    try {
+      await setMainImage(productId, imageId);
+      // Tùy chọn reload lại danh sách ảnh để đồng bộ lại flag isThumbnail/isMain mới nhất
+      fetchImages(productId);
+    } catch (err) {
+      alert("Thay đổi ảnh đại diện chính thất bại!");
+    }
+  };
+
+  // Validate và submit payload chuẩn DTO
+  const handleSubmitForm = () => {
+    if (!formData.name.trim()) return alert("Tên sản phẩm không được để trống");
+    if (!formData.description.trim())
+      return alert("Mô tả sản phẩm không được để trống");
+    if (formData.price === "" || Number(formData.price) < 0)
+      return alert("Giá sản phẩm không hợp lệ");
+    if (!formData.categoryId) return alert("Vui lòng chọn danh mục");
+    if (formData.quantity === "" || Number(formData.quantity) < 0)
+      return alert("Số lượng nhập kho không hợp lệ");
+
+    const submitPayload = {
+      name: formData.name.trim(),
+      description: formData.description.trim(),
+      price: Number(formData.price),
+      categoryId: Number(formData.categoryId),
+      quantity: Number(formData.quantity),
+    };
+
+    if (isEdit && productId) {
+      submitPayload.id = Number(productId);
+    }
+
+    onSubmit(submitPayload);
+  };
 
   return (
-    <form
-      onSubmit={handleFormSubmit}
-      className="space-y-6 text-left max-h-[75vh] overflow-y-auto pr-2"
-      style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-    >
-      {/* 1. CHỌN DỊCH VỤ */}
-      <div>
-        <label className="block text-xs font-black text-gray-400 uppercase tracking-wider mb-2">
-          1. Dịch vụ chăm sóc <span className="text-red-500">*</span>
-        </label>
-        <div className="flex flex-wrap gap-2 mb-2">
-          {services.map((s) => {
-            const isChecked = formData.serviceIds.includes(s.id.toString());
-            return (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => handleServiceToggle(s.id.toString())}
-                className={`px-3 py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  isChecked
-                    ? "bg-orange-50 border-orange-400 text-orange-600 shadow-sm"
-                    : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
-                }`}
-              >
-                {isChecked ? <X size={12} /> : <Plus size={12} />}
-                {s.name} ({s.durationMin}p)
-              </button>
-            );
-          })}
-        </div>
-
-        {selectedServices.length > 0 && (
-          <div className="p-3 bg-gray-50 rounded-xl text-xs text-gray-500 flex justify-between items-center font-medium">
-            <span>Đã chọn: {selectedServices.length} dịch vụ</span>
-            <span>
-              Tổng thời gian:{" "}
-              <strong className="text-orange-500 font-bold">
-                {totalDuration} phút
-              </strong>
-            </span>
-          </div>
-        )}
-
-        {formErrors.serviceIds && (
-          <p className="text-xs font-semibold text-red-500 mt-1 flex items-center gap-1">
-            <AlertCircle size={12} /> {formErrors.serviceIds}
-          </p>
-        )}
-      </div>
-
-      {/* 2. KHÁCH HÀNG */}
-      <div className="space-y-4 bg-orange-50/30 p-4 rounded-2xl border border-orange-100/50">
-        <label className="block text-xs font-black text-gray-400 uppercase tracking-wider">
-          2. Thông tin khách hàng <span className="text-red-500">*</span>
-        </label>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
-          <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1 flex items-center gap-1">
-              <Mail size={12} /> Email khách{" "}
-              <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="email"
-              placeholder="Ví dụ: customer@email.com"
-              value={formData.userEmail}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, userEmail: e.target.value }))
-              }
-              className={`w-full p-2.5 rounded-xl border outline-none text-sm text-gray-700 focus:border-orange-500 ${
-                formErrors.userEmail ? "border-red-400" : "border-gray-200"
-              }`}
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1">
-              Kết quả tra cứu
-            </label>
-            {matchedUser ? (
-              <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl flex items-center gap-2 text-xs font-bold">
-                <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
-                <div>
-                  <p>{matchedUser.name || initialData?.userName}</p>
-                  <p className="font-medium text-gray-400 text-[10px]">
-                    ID: {matchedUser.id}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="p-2.5 bg-gray-100 text-gray-400 border border-dashed rounded-xl text-xs font-medium text-center">
-                Chưa có dữ liệu
-              </div>
-            )}
-          </div>
-        </div>
-
-        {userError && (
-          <p className="text-xs font-semibold text-red-500 mt-1">{userError}</p>
-        )}
-        {formErrors.userId && (
-          <p className="text-xs font-semibold text-red-500 flex items-center gap-1">
-            <AlertCircle size={12} /> {formErrors.userId}
-          </p>
-        )}
-
-        <div>
-          <label className="block text-xs font-bold text-gray-500 mb-1">
-            Chọn Thú cưng tương ứng <span className="text-red-500">*</span>
-          </label>
-          <select
-            className={`w-full p-2.5 rounded-xl border outline-none bg-white font-medium text-sm text-gray-700 focus:border-orange-500 disabled:bg-gray-100 disabled:cursor-not-allowed ${
-              formErrors.petId ? "border-red-400" : "border-gray-200"
-            }`}
-            value={formData.petId}
-            onChange={(e) =>
-              setFormData((prev) => ({ ...prev, petId: e.target.value }))
-            }
-            disabled={!matchedUser || loadingPets}
-          >
-            {!matchedUser ? (
-              <option value="">-- Vui lòng nhập Email hợp lệ trước --</option>
-            ) : loadingPets ? (
-              <option value="">Đang tải danh sách pet của khách...</option>
-            ) : filteredPets.length === 0 ? (
-              <option value="">Tài khoản khách này chưa đăng ký Pet nào</option>
-            ) : (
-              <>
-                <option value="">-- Chọn thú cưng nhận dịch vụ --</option>
-                {filteredPets.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.specie || "Thú cưng"})
-                  </option>
-                ))}
-              </>
-            )}
-          </select>
-          {formErrors.petId && (
-            <p className="text-xs font-semibold text-red-500 mt-1 flex items-center gap-1">
-              <AlertCircle size={12} /> {formErrors.petId}
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* 3. NGÀY HẸN */}
-      <div>
-        <label className="block text-xs font-black text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-          <Calendar size={14} /> 3. Chọn ngày đặt lịch{" "}
-          <span className="text-red-500">*</span>
-        </label>
-        <input
-          type="date"
-          min={new Date().toISOString().split("T")[0]}
-          value={formData.date}
-          onChange={(e) =>
-            setFormData((prev) => ({ ...prev, date: e.target.value }))
-          }
-          className={`w-full p-3 rounded-xl border outline-none bg-white font-medium text-sm text-gray-700 focus:border-orange-500 ${
-            formErrors.date ? "border-red-400" : "border-gray-200"
-          }`}
-        />
-        {formErrors.date && (
-          <p className="text-xs font-semibold text-red-500 mt-1 flex items-center gap-1">
-            <AlertCircle size={12} /> {formErrors.date}
-          </p>
-        )}
-      </div>
-
-      {/* 4. KHUNG GIỜ */}
-      <div>
-        <label className="block text-xs font-black text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-          <Clock size={14} /> 4. Trạng thái ca trống{" "}
-          <span className="text-red-500">*</span>
-        </label>
-
-        {!formData.date ? (
-          <div className="p-4 bg-gray-50 text-gray-400 rounded-xl border border-dashed border-gray-200 text-center text-xs flex items-center justify-center gap-1.5">
-            <AlertCircle size={14} /> Vui lòng chọn{" "}
-            <strong>Ngày đặt lịch</strong> để hiển thị ca trống.
-          </div>
-        ) : formData.serviceIds.length === 0 ? (
-          <div className="p-4 bg-amber-50 text-amber-600 rounded-xl border border-dashed border-amber-200 text-center text-xs font-bold">
-            Vui lòng chọn dịch vụ ở mục 1 để tính toán thời lượng giữ ô!
-          </div>
-        ) : loadingSlots ? (
-          <div className="grid grid-cols-2 gap-2 animate-pulse">
-            {[1, 2, 3, 4].map((n) => (
-              <div key={n} className="h-14 bg-gray-100 rounded-xl" />
-            ))}
-          </div>
-        ) : slots.length === 0 ? (
-          <div className="p-4 bg-red-50 text-red-500 rounded-xl border border-red-100 text-center text-xs font-bold">
-            Không có ca làm việc hoặc đã kín lịch vào ngày này!
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto p-1 bg-gray-50 rounded-xl border">
-            {slots.map((slot, index) => {
-              const evaluation = checkConsecutiveSlots(index);
-              const isAvailable = evaluation.available;
-              const reason = isAvailable
-                ? null
-                : evaluation.reason || slot.reason;
-
-              const isInSelectedBlock =
-                isBlockValid &&
-                selectedStartIndex >= 0 &&
-                index >= selectedStartIndex &&
-                index < selectedStartIndex + slotsNeeded;
-
-              const isActualStart = formData.time === slot.start_time;
-              const badge = reason ? getReasonBadge(reason) : null;
-
-              return (
-                <button
-                  key={index}
-                  type="button"
-                  disabled={!isAvailable}
-                  onClick={() => handleSelectSlot(slot, index)}
-                  className={`p-2 rounded-xl border text-left relative transition-all flex flex-col justify-between h-14 ${
-                    isInSelectedBlock
-                      ? "bg-orange-500 text-white border-orange-500 shadow-sm font-bold scale-[1.01]"
-                      : !isAvailable
-                        ? "bg-gray-100 border-gray-100 text-gray-400 cursor-not-allowed"
-                        : "bg-white hover:bg-orange-50/40 border-gray-200 text-gray-700 hover:border-orange-300 cursor-pointer font-semibold"
-                  }`}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <span className="text-xs tracking-wide font-bold">
-                      {slot.start_time} – {slot.end_time}
-                    </span>
-                    {!isAvailable && badge && (
-                      <span
-                        className={`text-[8px] px-1 py-0.5 rounded font-bold uppercase tracking-wider ${badge.color}`}
-                      >
-                        {badge.label}
-                      </span>
-                    )}
-                  </div>
-                  <span
-                    className={`text-[9px] block font-medium truncate ${
-                      isInSelectedBlock ? "text-orange-100" : "text-gray-400"
-                    }`}
-                  >
-                    {isInSelectedBlock
-                      ? isActualStart
-                        ? `Bắt đầu (${totalDuration}p)`
-                        : "Chuỗi giữ chỗ"
-                      : isAvailable
-                        ? "Đủ điều kiện chọn"
-                        : reason === "INSUFFICIENT_CONSECUTIVE_SLOTS"
-                          ? "Thiếu ô liền kề"
-                          : "Không thể chọn"}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {formErrors.time && (
-          <p className="text-xs font-semibold text-red-500 mt-1 flex items-center gap-1">
-            <AlertCircle size={12} /> {formErrors.time}
-          </p>
-        )}
-      </div>
-
-      {/* GHI CHÚ */}
-      <div>
-        <label className="block text-xs font-black text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-          <Notebook size={14} /> Ghi chú lịch hẹn
-        </label>
-        <textarea
-          rows="2"
-          placeholder="Yêu cầu đặc biệt về sức khỏe hoặc hành vi của bé..."
-          value={formData.note}
-          onChange={(e) =>
-            setFormData((prev) => ({ ...prev, note: e.target.value }))
-          }
-          className="w-full p-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-orange-500 text-gray-700"
-        />
-      </div>
-
-      {/* TỔNG TIỀN */}
-      {(totalAmount > 0 || initialData?.actualPrice) && (
-        <div className="p-3 bg-orange-50/50 rounded-xl border border-orange-100 flex justify-between items-center">
-          <span className="text-xs font-bold text-gray-600">
-            {initialData ? "Doanh thu thực tế:" : "Doanh thu dự kiến:"}
+    <div className="space-y-6 relative">
+      {/* Loading Overlay khi hệ thống đang xử lý sản phẩm */}
+      {loadingProduct && (
+        <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] flex flex-col items-center justify-center z-50">
+          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-2"></div>
+          <span className="text-sm font-medium text-gray-600">
+            Đang xử lý dữ liệu sản phẩm...
           </span>
-          <strong className="text-lg font-black text-orange-600">
-            {(totalAmount || initialData?.actualPrice || 0).toLocaleString(
-              "vi-VN",
-            )}{" "}
-            đ
-          </strong>
         </div>
       )}
 
-      {/* FOOTER */}
-      <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 sticky bottom-0 bg-white">
+      {/* ── Group 1: Tên & Danh mục sản phẩm ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Tên sản phẩm *
+          </label>
+          <input
+            type="text"
+            value={formData.name}
+            onChange={(e) =>
+              setFormData((p) => ({ ...p, name: e.target.value }))
+            }
+            placeholder="Nhập tên sản phẩm..."
+            className="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Danh mục sản phẩm *
+          </label>
+          <select
+            value={formData.categoryId}
+            onChange={(e) =>
+              setFormData((p) => ({ ...p, categoryId: e.target.value }))
+            }
+            className="w-full rounded-lg border border-gray-300 p-2.5 text-sm outline-none focus:border-blue-500"
+          >
+            <option value="">-- Chọn danh mục --</option>
+            {categories &&
+              categories
+                .filter(
+                  (cat) =>
+                    cat.categoryType === "PRODUCT" ||
+                    cat.type === "PRODUCT" ||
+                    !cat.categoryType,
+                )
+                .map((cat) => (
+                  <option key={cat.value || cat.id} value={cat.value || cat.id}>
+                    {cat.label || cat.name}
+                  </option>
+                ))}
+          </select>
+        </div>
+      </div>
+
+      {/* ── Group 2: Mô tả sản phẩm ── */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Mô tả sản phẩm *
+        </label>
+        <textarea
+          rows="3"
+          value={formData.description}
+          onChange={(e) =>
+            setFormData((p) => ({ ...p, description: e.target.value }))
+          }
+          placeholder="Mô tả chi tiết các đặc tính, công dụng sản phẩm..."
+          className="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+        />
+      </div>
+
+      {/* ── Group 3: Giá bán & Số lượng ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Giá sản phẩm (đ) *
+          </label>
+          <input
+            type="number"
+            min="0"
+            value={formData.price}
+            onChange={(e) =>
+              setFormData((p) => ({ ...p, price: e.target.value }))
+            }
+            placeholder="Nhập giá bán..."
+            className="w-full rounded-lg border border-gray-300 p-2.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium text-gray-800"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Số lượng nhập kho ban đầu *
+          </label>
+          <input
+            type="number"
+            min="0"
+            value={formData.quantity}
+            onChange={(e) =>
+              setFormData((p) => ({ ...p, quantity: e.target.value }))
+            }
+            placeholder="Nhập số lượng tồn..."
+            className="w-full rounded-lg border border-gray-300 p-2.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+
+      {/* ── Group 4: Quản lý Album Ảnh (Chỉ hiển thị khi EDIT) ── */}
+      {isEdit && (
+        <div className="space-y-4 border-t border-gray-100 pt-4 relative">
+          {loadingImages && (
+            <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] flex items-center justify-center z-10">
+              <span className="text-xs font-semibold text-gray-500 animate-pulse">
+                Đang đồng bộ tập tin ảnh...
+              </span>
+            </div>
+          )}
+
+          <label className="block text-sm font-semibold text-gray-800">
+            Quản lý Album Ảnh sản phẩm
+          </label>
+
+          <div>
+            <p className="text-xs text-gray-500 mb-2">
+              {/* Danh sách hình ảnh chi tiết từ hệ thống (
+              {productImages?.length || 0}/6) */}
+            </p>
+            <p className="text-[11px] text-gray-400 mb-3">
+              * Mẹo: Click trực tiếp vào một ảnh để cấu hình đặt làm ảnh hiển
+              thị chính (Thumbnail).
+            </p>
+
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-4">
+              {(productImages || []).map((img) => {
+                const isMain = img.isThumbnail || img.isMain;
+                const currentImgUrl = img.imageUrl || img.url;
+                return (
+                  <div
+                    key={img.id}
+                    className={`relative group aspect-square rounded-xl border overflow-hidden cursor-pointer ${
+                      isMain
+                        ? "border-orange-500 ring-2 ring-orange-400/30"
+                        : "border-gray-200"
+                    }`}
+                  >
+                    <img
+                      src={currentImgUrl}
+                      alt={`gallery-${img.id}`}
+                      className="w-full h-full object-cover bg-gray-50"
+                      onClick={() => handleSetMainImage(img.id)}
+                      title="Click để đặt làm ảnh hiển thị chính"
+                      onError={(e) => {
+                        e.target.src = "https://placehold.co/300x300";
+                      }}
+                    />
+
+                    {isMain && (
+                      <span className="absolute bottom-1 left-1 bg-orange-500 text-white text-[9px] px-1.5 py-0.5 rounded font-bold shadow">
+                        Chính
+                      </span>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveGalleryImage(img.id);
+                      }}
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow hover:bg-red-600"
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
+
+              {(productImages?.length || 0) < 6 && (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="aspect-square rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/40 transition-colors text-gray-400 hover:text-blue-500"
+                >
+                  <span className="text-2xl leading-none">+</span>
+                  <span className="text-[10px] mt-1">Tải ảnh lên</span>
+                </div>
+              )}
+            </div>
+
+            {/* Input file ẩn */}
+            <div className="hidden">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*"
+                multiple
+              />
+            </div>
+
+            {(productImages?.length || 0) < 6 && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-slate-800 text-white px-4 py-2 rounded-lg text-xs font-medium hover:bg-slate-900 transition-colors flex items-center gap-1.5 shadow-sm"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                    className="w-4 h-4"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 12 12M12 3v13.5"
+                    />
+                  </svg>
+                  Chọn tệp từ thiết bị
+                </button>
+                <span className="text-xs text-gray-400">
+                  Hỗ trợ các định dạng .png, .jpg, .jpeg, .webp
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Group 5: Actions Footer ── */}
+      <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
         <button
           type="button"
           onClick={onClose}
-          className="px-4 py-2 border border-gray-200 text-gray-500 text-sm font-semibold rounded-xl hover:bg-gray-50 transition-all"
+          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50"
         >
-          Hủy
+          Hủy bỏ
         </button>
         <button
-          type="submit"
-          disabled={!formData.time || !matchedUser}
-          className="px-5 py-2 bg-orange-500 text-white text-sm font-black rounded-xl hover:bg-opacity-95 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-all"
+          type="button"
+          onClick={handleSubmitForm}
+          className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 flex items-center gap-2"
         >
-          Xác nhận lịch đặt
+          {isEdit ? "Cập nhật sản phẩm" : "Tạo sản phẩm mới"}
         </button>
       </div>
-    </form>
+    </div>
   );
 };
 
-export default BookingFormAdmin;
+export default ProductFormAdmin;

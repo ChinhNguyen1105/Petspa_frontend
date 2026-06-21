@@ -121,30 +121,34 @@ export const useProductImageStore = create((set, get) => ({
     | DELETE IMAGE
     |--------------------------------------------------------------------------
     */
-    deleteImage: async (
-      imageId
-    ) => {
+ /*
+    |--------------------------------------------------------------------------
+    | DELETE IMAGE
+    |--------------------------------------------------------------------------
+    */
+    deleteImage: async (imageId) => {
       try {
-        const res =
-          await ProductImageService.deleteImage(
-            imageId
-          );
+        const res = await ProductImageService.deleteImage(imageId);
 
-        set((state) => ({
-          images:
-            state.images.filter(
-              (img) =>
-                img.id !== imageId
-            ),
-        }));
+        // Cập nhật đồng nhất với cấu trúc Map imagesByProductId
+        set((state) => {
+          const updatedMap = { ...state.imagesByProductId };
+          
+          // Duyệt qua từng productId trong Map để lọc bỏ ảnh vừa xóa
+          Object.keys(updatedMap).forEach((productId) => {
+            if (Array.isArray(updatedMap[productId])) {
+              updatedMap[productId] = updatedMap[productId].filter(
+                (img) => img.id !== imageId
+              );
+            }
+          });
+
+          return { imagesByProductId: updatedMap };
+        });
 
         return res;
       } catch (err) {
-        console.error(
-          "Delete image error:",
-          err
-        );
-
+        console.error("Delete image error:", err);
         throw err;
       }
     },
@@ -154,45 +158,32 @@ export const useProductImageStore = create((set, get) => ({
     | SET THUMBNAIL
     |--------------------------------------------------------------------------
     */
-    setMainImage: async (
-      productId,
-      imageId
-    ) => {
+    setMainImage: async (productId, imageId) => {
       try {
-        const res =
-          await ProductImageService.setMainImage(
-            productId,
-            imageId
-          );
+        const res = await ProductImageService.setMainImage(productId, imageId);
 
-        set((state) => ({
-          images:
-            state.images.map(
-              (img) => ({
-                ...img,
+        // Cập nhật đồng nhất với cấu trúc Map imagesByProductId theo đúng productId truyền vào
+        set((state) => {
+          const updatedMap = { ...state.imagesByProductId };
+          const productTargetId = String(productId); // Đảm bảo trùng kiểu Key (String) của Object
 
-                isMain:
-                  img.id ===
-                  imageId,
+          if (Array.isArray(updatedMap[productTargetId])) {
+            updatedMap[productTargetId] = updatedMap[productTargetId].map((img) => ({
+              ...img,
+              isMain: img.id === imageId,
+              isThumbnail: img.id === imageId, // Đồng bộ cả 2 cờ hiển thị tránh sót logic
+            }));
+          }
 
-                isThumbnail:
-                  img.id ===
-                  imageId,
-              })
-            ),
-        }));
+          return { imagesByProductId: updatedMap };
+        });
 
         return res;
       } catch (err) {
-        console.error(
-          "Set thumbnail error:",
-          err
-        );
-
+        console.error("Set thumbnail error:", err);
         throw err;
       }
     },
-
     /*
     |--------------------------------------------------------------------------
     | HELPERS

@@ -5,13 +5,14 @@ import { useProductImageStore } from "../../store/productImageStore";
 
 const ProductFormAdmin = ({ initialData, onSubmit, onClose }) => {
   const isEdit = !!initialData;
+  const productId = initialData?.id;
 
   const { loading: loadingProduct } = useProductStore();
   const { categories, fetchCategories } = useCategoryStore();
 
   // Kết nối các phương thức quản lý ảnh từ useProductImageStore
   const {
-    images: productImages,
+    imagesByProductId,
     loading: loadingImages,
     fetchImages,
     uploadImages,
@@ -19,6 +20,9 @@ const ProductFormAdmin = ({ initialData, onSubmit, onClose }) => {
     setMainImage,
     clearImages,
   } = useProductImageStore();
+
+  // SỬA ĐỔI TẠI ĐÂY: Trích xuất chính xác mảng ảnh dựa vào productId từ Object Map
+  const productImages = productId ? imagesByProductId?.[productId] || [] : [];
 
   // State quản lý dữ liệu form bám sát theo Class ReqCreateProduct DTO
   const [formData, setFormData] = useState({
@@ -42,7 +46,6 @@ const ProductFormAdmin = ({ initialData, onSubmit, onClose }) => {
   // Đổ dữ liệu ban đầu hoặc Fetch ảnh từ server về nếu là Mode Edit
   useEffect(() => {
     if (initialData) {
-      const productId = initialData.id;
       setFormData({
         name: initialData.name || "",
         description: initialData.description || "",
@@ -55,8 +58,8 @@ const ProductFormAdmin = ({ initialData, onSubmit, onClose }) => {
           "",
       });
 
-      if (productId) {
-        fetchImages(productId);
+      if (initialData.id) {
+        fetchImages(initialData.id);
       }
     } else {
       setFormData({
@@ -66,22 +69,22 @@ const ProductFormAdmin = ({ initialData, onSubmit, onClose }) => {
         categoryId: "",
         quantity: "",
       });
-      clearImages();
+      if (clearImages) clearImages();
     }
   }, [initialData, fetchImages, clearImages]);
 
   // Xử lý upload tập tin hình ảnh (Hỗ trợ chọn nhiều ảnh cùng lúc)
   const handleFileChange = async (e) => {
     const fileList = e.target.files;
-    if (!fileList || fileList.length === 0) return;
+    if (!fileList || fileList.length === 0 || !productId) return;
 
     // Ép kiểu FileList thành một Array thực thụ để pass qua Service/Store không bị lỗi .forEach
     const filesArray = Array.from(fileList);
 
-    // Kiểm tra giới hạn số lượng ảnh (Tối đa 6) dựa trên mảng mới biến đổi
-    if (productImages.length + filesArray.length > 6) {
+    // Kiểm tra giới hạn số lượng ảnh (Tối đa 6) sử dụng optional chaining phòng xa
+    if ((productImages?.length || 0) + filesArray.length > 6) {
       alert(
-        `Hệ thống chỉ hỗ trợ tối đa 6 ảnh minh họa. Hiện tại bạn đã có ${productImages.length} ảnh.`,
+        `Hệ thống chỉ hỗ trợ tối đa 6 ảnh minh họa. Hiện tại bạn đã có ${productImages?.length || 0} ảnh.`,
       );
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
@@ -89,7 +92,7 @@ const ProductFormAdmin = ({ initialData, onSubmit, onClose }) => {
 
     try {
       // Truyền mảng chuẩn (Array) thay vì FileList gốc
-      await uploadImages(initialData.id, filesArray);
+      await uploadImages(productId, filesArray);
     } catch (err) {
       alert(
         "Tải tập tin hình ảnh lên thất bại, vui lòng kiểm tra lại định dạng tệp.",
@@ -104,17 +107,36 @@ const ProductFormAdmin = ({ initialData, onSubmit, onClose }) => {
     if (!window.confirm("Bạn có chắc chắn muốn xóa hình ảnh này không?"))
       return;
     try {
+      console.log("Đang gọi xóa ảnh ID:", imageId);
       await deleteImage(imageId);
+
+      // Nếu chạy xuống đây tức là thành công
+      alert("Xóa ảnh thành công!");
+      if (productId) fetchImages(productId);
     } catch (err) {
-      alert("Xóa ảnh thất bại!");
+      // 🔍 Xem log này ở F12 Console để biết lỗi gì
+      console.error("Lỗi xóa ảnh chi tiết:", err);
+      alert(`Xóa ảnh thất bại! Chi tiết: ${err.message || err}`);
     }
   };
 
   const handleSetMainImage = async (imageId) => {
+    if (!productId) return;
     try {
-      await setMainImage(initialData.id, imageId);
+      console.log(
+        "Đang gọi set main cho ảnh ID:",
+        imageId,
+        "thuộc product:",
+        productId,
+      );
+      await setMainImage(productId, imageId);
+
+      alert("Thay đổi ảnh đại diện chính thành công!");
+      if (productId) fetchImages(productId);
     } catch (err) {
-      alert("Thay đổi ảnh đại diện chính thất bại!");
+      // 🔍 Xem log này ở F12 Console để biết lỗi gì
+      console.error("Lỗi set main chi tiết:", err);
+      alert(`Thay đổi ảnh thất bại! Chi tiết: ${err.message || err}`);
     }
   };
 
@@ -137,12 +159,14 @@ const ProductFormAdmin = ({ initialData, onSubmit, onClose }) => {
       quantity: Number(formData.quantity),
     };
 
-    if (isEdit && initialData?.id) {
-      submitPayload.id = Number(initialData.id);
+    if (isEdit && productId) {
+      submitPayload.id = Number(productId);
     }
     console.log("submit payload: ", submitPayload);
     onSubmit(submitPayload);
   };
+
+  console.log("productImg: ", productImages);
 
   return (
     <div className="space-y-6 relative">
@@ -184,7 +208,6 @@ const ProductFormAdmin = ({ initialData, onSubmit, onClose }) => {
             className="w-full rounded-lg border border-gray-300 p-2.5 text-sm outline-none focus:border-blue-500"
           >
             <option value="">-- Chọn danh mục --</option>
-            {/* SỬA ĐỔI CHÍNH: Lọc chặt chẽ một lần nữa trước khi render lên UI */}
             {categories &&
               categories
                 .filter(
@@ -193,7 +216,6 @@ const ProductFormAdmin = ({ initialData, onSubmit, onClose }) => {
                     cat.type === "PRODUCT" ||
                     !cat.categoryType,
                 )
-                // Thêm điều kiện !cat.categoryType dự phòng nếu store chỉ lưu mảng map sẵn {value, label}
                 .map((cat) => (
                   <option key={cat.value || cat.id} value={cat.value || cat.id}>
                     {cat.label || cat.name}
@@ -270,7 +292,8 @@ const ProductFormAdmin = ({ initialData, onSubmit, onClose }) => {
 
           <div>
             <p className="text-xs text-gray-500 mb-2">
-              Danh sách hình ảnh chi tiết từ hệ thống ({productImages.length}/6)
+              Danh sách hình ảnh chi tiết từ hệ thống (
+              {productImages?.length || 0}/6)
             </p>
             <p className="text-[11px] text-gray-400 mb-3">
               * Mẹo: Click trực tiếp vào một ảnh để cấu hình đặt làm ảnh hiển
@@ -278,7 +301,7 @@ const ProductFormAdmin = ({ initialData, onSubmit, onClose }) => {
             </p>
 
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-4">
-              {productImages.map((img) => {
+              {(productImages || []).map((img) => {
                 const isMain = img.isThumbnail || img.isMain;
                 const currentImgUrl = img.imageUrl || img.url;
                 return (
@@ -321,7 +344,7 @@ const ProductFormAdmin = ({ initialData, onSubmit, onClose }) => {
                 );
               })}
 
-              {productImages.length < 6 && (
+              {(productImages?.length || 0) < 6 && (
                 <div
                   onClick={() => fileInputRef.current?.click()}
                   className="aspect-square rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/40 transition-colors text-gray-400 hover:text-blue-500"
@@ -343,7 +366,7 @@ const ProductFormAdmin = ({ initialData, onSubmit, onClose }) => {
               />
             </div>
 
-            {productImages.length < 6 && (
+            {(productImages?.length || 0) < 6 && (
               <div className="flex items-center gap-2">
                 <button
                   type="button"
