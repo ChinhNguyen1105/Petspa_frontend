@@ -34,8 +34,8 @@ const ServiceManagement = () => {
   const serviceLoading = useServiceStore((state) => state.loading);
   const errorStore = useServiceStore((state) => state.error);
 
-  // Đổi sang dùng action searchServices từ store để tìm kiếm API chuyên biệt
-  const searchServices = useServiceStore((state) => state.searchServices);
+  // ĐÃ THAY THẾ: Sử dụng fetchServices thay cho searchService cũ
+  const fetchServices = useServiceStore((state) => state.fetchServices);
 
   const createService = useServiceStore((state) => state.createService);
   const updateService = useServiceStore((state) => state.updateService);
@@ -86,28 +86,37 @@ const ServiceManagement = () => {
     return () => clearTimeout(handler);
   }, [searchTerm]);
 
-  // ─── EFFECT: GỌI API SEARCHSERVICES QUA SPECIFICATION FILTER ──────────────────
+  // ─── EFFECT: GỌI API FETCHSERVICES QUA SPECIFICATION FILTER ──────────────────
   const handleLoadData = React.useCallback(() => {
     const filterConditions = [];
 
-    // 1. Tìm kiếm tương đối theo Tên gói dịch vụ (Nếu có nhập text)
+    // 1. Tìm kiếm tương đối theo Tên gói dịch vụ (Dùng toán tử ~ và cặp wildcard * ở hai đầu)
     if (debouncedSearchTerm) {
       filterConditions.push(`name~*${debouncedSearchTerm}*`);
     }
 
-    // 2. Tìm kiếm chính xác theo Id Danh mục (Nếu chọn danh mục cụ thể)
+    // 2. Tìm kiếm chính xác theo trường liên kết danh mục (Dùng toán tử : kết nối qua dấu chấm)
     if (selectedCategory !== 0) {
       filterConditions.push(`category.id:${selectedCategory}`);
     }
 
-    // Gộp mảng các điều kiện bằng dấu phẩy theo chuẩn Specification API của hệ thống
+    // Gộp mảng các điều kiện bằng dấu phẩy theo chuẩn Specification API của hệ thống (Toán tử AND)
     const filterParam =
       filterConditions.length > 0 ? filterConditions.join(",") : "";
 
-    // Kích hoạt gọi API tìm kiếm thông qua searchServices của Store
-    // Khớp signature: searchServices(filterParam, params, options)
-    searchServices(filterParam, { page: currentPage });
-  }, [currentPage, debouncedSearchTerm, selectedCategory, searchServices]);
+    // Kích hoạt gọi API tìm kiếm thông qua fetchServices tuân thủ cấu trúc params truyền vào
+    fetchServices({
+      page: currentPage - 1, // Điều chỉnh nếu API của bạn sử dụng Base-0 index cho Page (Trang 1 -> 0)
+      size: meta?.size || 10,
+      filter: filterParam,
+    });
+  }, [
+    currentPage,
+    debouncedSearchTerm,
+    selectedCategory,
+    fetchServices,
+    meta?.size,
+  ]);
 
   useEffect(() => {
     handleLoadData();

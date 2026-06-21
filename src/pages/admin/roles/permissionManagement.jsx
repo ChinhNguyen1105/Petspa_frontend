@@ -29,7 +29,7 @@ const MODULE_OPTIONS = [
   { value: "PERMISSION", label: " PERMISSION (QUYỀN HẠN)" },
   { value: "PRODUCT", label: " PRODUCT (SẢN PHẨM)" },
   { value: "PET", label: " PET (THÚ CƯNG)" },
-  { value: "SPA", label: " SPA SERVICE (DỊCH VỤ SPA)" },
+  { value: "SPA", label: " SERVICE (DỊCH VỤ SPA)" },
   { value: "BOOKING", label: " BOOKING (LỊCH ĐẶT)" },
   { value: "ORDER", label: " ORDER (ĐƠN HÀNG)" },
   { value: "CART", label: " CART (GIỎ HÀNG)" },

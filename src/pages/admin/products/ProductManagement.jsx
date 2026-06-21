@@ -9,7 +9,6 @@ import {
   Layers,
   ChevronRight,
   Hash,
-  Boxes,
 } from "lucide-react";
 import Loading from "../../../components/common/Loading";
 import { formatPrice } from "../../../utils/formatPrice";
@@ -47,7 +46,6 @@ const ProductManagement = () => {
   const [searchId, setSearchId] = useState("");
   const [searchName, setSearchName] = useState("");
   const [selectedCategory, setSelectedCategory] = useState(0);
-  const [stockStatus, setStockStatus] = useState("ALL"); // ALL, OUT_OF_STOCK, IN_STOCK
   const [currentPage, setCurrentPage] = useState(1);
 
   // State trì hoãn (Debounce) tối ưu tần suất gọi API
@@ -105,14 +103,6 @@ const ProductManagement = () => {
     // 3. Lọc theo Phân loại danh mục (Sử dụng trường liên kết theo đặc tả database)
     if (selectedCategory !== 0) {
       filterConditions.push(`category.id:${selectedCategory}`);
-      // Hoặc sử dụng `categoryId:${selectedCategory}` tùy thuộc hoàn toàn vào cấu trúc Entity Backend của bạn
-    }
-
-    // 4. Lọc theo trạng thái kho hàng (Toán tử so sánh số số học: >, <, :)
-    if (stockStatus === "OUT_OF_STOCK") {
-      filterConditions.push(`stockQuantity:0`); // Hết hàng: Số lượng bằng 0
-    } else if (stockStatus === "IN_STOCK") {
-      filterConditions.push(`stockQuantity>0`); // Còn hàng: Số lượng >= 1 (Theo tài liệu toán tử `>` tức là >=)
     }
 
     // Gộp tất cả các mảng điều kiện bằng dấu phẩy
@@ -124,18 +114,12 @@ const ProductManagement = () => {
       page: currentPage,
       filter: filterParam,
     });
-  }, [
-    currentPage,
-    debouncedFilters,
-    selectedCategory,
-    stockStatus,
-    fetchProducts,
-  ]);
+  }, [currentPage, debouncedFilters, selectedCategory, fetchProducts]);
 
   // Reset về trang 1 khi bất kỳ tiêu chí lọc nào thay đổi để tránh lỗi lệch trang dữ liệu
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedFilters, selectedCategory, stockStatus]);
+  }, [debouncedFilters, selectedCategory]);
 
   // Danh sách Mapping Options cho Dropdown Category
   const categoriesOptions = [
@@ -146,13 +130,6 @@ const ProductManagement = () => {
         value: c.id,
         label: c.name,
       })),
-  ];
-
-  // Trạng thái Kho hàng Options
-  const stockOptions = [
-    { value: "ALL", label: "Tất cả trạng thái kho" },
-    { value: "IN_STOCK", label: "Còn hàng (Số lượng > 0)" },
-    { value: "OUT_OF_STOCK", label: "Hết hàng (Số lượng = 0)" },
   ];
 
   // ── MODAL HANDLERS ────────────────────────────────────────────────────────
@@ -183,7 +160,6 @@ const ProductManagement = () => {
           setSearchId("");
           setSearchName("");
           setSelectedCategory(0);
-          setStockStatus("ALL");
           setCurrentPage(1);
         } else {
           showToast(`Cập nhật thông tin sản phẩm thành công! 💾`, "success");
@@ -296,8 +272,8 @@ const ProductManagement = () => {
         </button>
       </div>
 
-      {/* Grid Filter Bar: Chia thành 4 cột nhập liệu riêng biệt chuyên nghiệp */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
+      {/* Grid Filter Bar: Đã chuyển đổi từ 4 cột sang 3 cột mượt mà */}
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
         {/* Bộ lọc 1: Mã định danh sản phẩm (ID) */}
         <div className="relative w-full">
           <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-400">
@@ -340,24 +316,6 @@ const ProductManagement = () => {
             {categoriesOptions.map((cat) => (
               <option key={cat.value} value={cat.value}>
                 {cat.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Bộ lọc 4: Trạng thái kho hàng */}
-        <div className="relative w-full">
-          <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-400 pointer-events-none z-10">
-            <Boxes size={16} />
-          </span>
-          <select
-            value={stockStatus}
-            onChange={(e) => setStockStatus(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 focus:outline-none focus:border-orange-500 appearance-none"
-          >
-            {stockOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
               </option>
             ))}
           </select>
